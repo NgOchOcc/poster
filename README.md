@@ -27,6 +27,22 @@ If you're looking for a beamer presentation theme, take a look at [Auriga].
 
 1. Run `make` to build your poster
 
+### NeurIPS 2026 poster
+
+This repository also includes a 140 cm x 90 cm landscape poster for
+*Mixture-of-Control: State-Aware Fine-Tuning for Transformer-based Models*,
+matching the [published NeurIPS 2026 main-conference poster size][neurips-2026-posters].
+Edit `poster_neurips.tex`, then build it with:
+
+```sh
+make neurips
+```
+
+The PDF is written to `output/pdf/neurips-2026-poster-template.pdf`. The visual
+style is NeurIPS-inspired and is not an official conference asset.
+
+[neurips-2026-posters]: https://neurips.cc/Conferences/2026/PosterInstructions
+
 ## FAQ
 
 See the [FAQ] in the Wiki for answers to frequently asked questions such as how to add an institution logo to the poster.

@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mixture-of-Control</title>
+<meta name="description" content="Mixture-of-Control (MoC): State-Aware Fine-Tuning for Transformer-based Models. NeurIPS 2026.">
+<meta property="og:title" content="Mixture-of-Control: State-Aware Fine-Tuning for Transformer-based Models">
+<meta property="og:description" content="MoC treats block-wise control states as experts in a sparse mixture-of-experts, enabling efficient cross-layer communication for state-based fine-tuning.">
+<meta property="og:image" content="static/images/MoC_architecture.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23534AB7'/%3E%3Cpath d='M8 22V10l8 8 8-8v12' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<style>
+:root{
+  --bg:#fbfaf7; --surface:#ffffff; --surface-2:#f4f2ec; --line:#e6e2d8;
+  --ink:#16172b; --ink-2:#3d4060; --muted:#6b6e88;
+  --accent:#534ab7; --accent-ink:#3f37a0; --accent-soft:#ecebfb;
+  --route:#185fa5; --peach:#fff3e6; --peach-line:#f3d3ae; --peach-ink:#a4520c;
+  --up:#16794a; --dn:#c0392b;
+  --f-fill:#dae8fc; --f-stroke:#6c8ebf; --g-fill:#f8cecc; --g-stroke:#b85450;
+  --gate-fill:#fff2cc; --gate-stroke:#d6b656; --arc:#8e63b0; --arc-2:#2e7d32;
+  --shadow:0 1px 2px rgba(22,23,43,.04),0 8px 28px rgba(22,23,43,.06);
+  --t-scope:#5046c8; --t-acc:#0e8a62; --t-mem:#c4610f; --t-param:#1764b0;
+  --radius:16px; --maxw:1120px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e0f1c; --surface:#161829; --surface-2:#1c1e33; --line:#2b2e48;
+    --ink:#eceaf6; --ink-2:#c6c6dc; --muted:#9a9cb8;
+    --accent:#9d95f0; --accent-ink:#b8b2ff; --accent-soft:#25234a;
+    --route:#6fa8e8; --peach:#2b2117; --peach-line:#5a3f24; --peach-ink:#f2b77c;
+    --up:#4fd18b; --dn:#ff7b6b; --arc:#c49be6; --arc-2:#6fd07a;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35);
+    --t-scope:#a69ff7; --t-acc:#4fd1a2; --t-mem:#f5a35c; --t-param:#7cb6f2;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e0f1c; --surface:#161829; --surface-2:#1c1e33; --line:#2b2e48;
+  --ink:#eceaf6; --ink-2:#c6c6dc; --muted:#9a9cb8;
+  --accent:#9d95f0; --accent-ink:#b8b2ff; --accent-soft:#25234a;
+  --route:#6fa8e8; --peach:#2b2117; --peach-line:#5a3f24; --peach-ink:#f2b77c;
+  --up:#4fd18b; --dn:#ff7b6b; --arc:#c49be6; --arc-2:#6fd07a;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 28px rgba(0,0,0,.35);
+    --t-scope:#a69ff7; --t-acc:#4fd1a2; --t-mem:#f5a35c; --t-param:#7cb6f2;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 Inter,system-ui,-apple-system,Segoe UI,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--accent-ink);text-decoration:none}
+a:hover{text-decoration:underline}
+img{max-width:100%;height:auto;display:block}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+@media (max-width:640px){.wrap{padding:0 16px}}
+
+/* nav */
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:saturate(1.4) blur(12px);-webkit-backdrop-filter:saturate(1.4) blur(12px);border-bottom:1px solid transparent;transition:border-color .2s}
+.nav.scrolled{border-bottom-color:var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{font-weight:800;letter-spacing:-.02em;color:var(--ink);display:flex;align-items:center;gap:10px}
+.brand:hover{text-decoration:none}
+.brand-mark{width:26px;height:26px;border-radius:7px;background:var(--accent);display:grid;place-items:center}
+.nav-links{display:flex;gap:4px;margin-left:auto;overflow-x:auto;scrollbar-width:none}
+.nav-links::-webkit-scrollbar{display:none}
+.nav-links a{color:var(--muted);font-size:14px;font-weight:500;padding:6px 10px;border-radius:8px;white-space:nowrap}
+.nav-links a:hover,.nav-links a.active{color:var(--ink);background:var(--surface-2);text-decoration:none}
+.theme-btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);width:34px;height:34px;border-radius:9px;display:grid;place-items:center;cursor:pointer;flex:none}
+@media (max-width:760px){.nav-links{display:none}.theme-btn{margin-left:auto}}
+
+/* hero */
+.hero{position:relative;padding:84px 0 56px;text-align:center;overflow:hidden;isolation:isolate;
+  background:
+    radial-gradient(42% 55% at 12% 18%,color-mix(in srgb,var(--accent) 20%,transparent),transparent 70%),
+    radial-gradient(38% 50% at 88% 14%,color-mix(in srgb,var(--route) 18%,transparent),transparent 70%),
+    radial-gradient(40% 45% at 78% 92%,color-mix(in srgb,#e8954a 16%,transparent),transparent 70%),
+    radial-gradient(36% 40% at 20% 95%,color-mix(in srgb,#d65f8a 10%,transparent),transparent 70%)}
+.hero::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background-image:radial-gradient(color-mix(in srgb,var(--ink) 16%,transparent) 1px,transparent 1.2px);background-size:22px 22px;
+  -webkit-mask-image:radial-gradient(70% 75% at 50% 42%,#000 30%,transparent 80%);mask-image:radial-gradient(70% 75% at 50% 42%,#000 30%,transparent 80%)}
+.hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:90px;z-index:-1;pointer-events:none;background:linear-gradient(transparent,var(--bg))}
+.hero-bg{position:absolute;inset:0;pointer-events:none;opacity:.7;z-index:-1}
+.hero-bg svg{width:100%;height:100%}
+.hero-bg .arc{fill:none;stroke:var(--accent);stroke-width:1.4;stroke-dasharray:6 8;opacity:.35;animation:dash 14s linear infinite}
+.hero-bg .arc.b{stroke:var(--route);animation-duration:18s;animation-direction:reverse}
+.hero-bg .node{fill:color-mix(in srgb,var(--surface) 85%,transparent);stroke:color-mix(in srgb,var(--accent) 25%,var(--line))}
+.hero-bg .node.g{stroke:color-mix(in srgb,#b85450 35%,var(--line))}
+@keyframes dash{to{stroke-dashoffset:-280}}
+@media (prefers-reduced-motion:reduce){.hero-bg .arc{animation:none}}
+.hero .wrap{position:relative}
+.badge{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--accent-ink);background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);padding:6px 14px;border-radius:999px;letter-spacing:.02em}
+.badge .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%,transparent)}
+h1.title{font-family:Newsreader,Georgia,serif;font-weight:600;font-size:clamp(40px,7vw,76px);line-height:1.02;letter-spacing:-.025em;margin:8px 0 18px}
+h1.title .grad{display:inline-block;background:linear-gradient(100deg,var(--accent) 0%,var(--route) 50%,#d07a2a 100%);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:.06em}
+h1.title .sub{display:block;width:fit-content;max-width:820px;text-wrap:balance;margin:10px auto 0;font-size:.5em;line-height:1.15;letter-spacing:-.015em}
+.hero .badge{margin-top:6px}
+.subtitle{font-size:clamp(18px,2.4vw,24px);color:var(--ink-2);font-weight:500;max-width:760px;margin:0 auto;letter-spacing:-.01em}
+.authors{margin:30px auto 6px;font-size:18px;display:flex;flex-wrap:wrap;justify-content:center;gap:6px 26px;font-weight:500}
+.authors sup{color:var(--accent-ink);font-weight:600;font-size:11px;margin-left:1px}
+.affils{color:var(--ink-2);font-size:15.5px;display:flex;flex-wrap:wrap;justify-content:center;gap:4px 22px}
+.affils sup{color:var(--accent-ink);font-weight:600}
+.notes{color:var(--muted);font-size:13px;margin-top:12px;display:flex;flex-wrap:wrap;justify-content:center;gap:2px 18px}
+.btns{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:28px}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;font-weight:600;font-size:15px;background:var(--ink);color:var(--bg);border:1px solid var(--ink);transition:transform .15s,box-shadow .15s}
+.btn:hover{text-decoration:none;transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn.ghost{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.btn.soon{opacity:.55;cursor:default;pointer-events:none}
+.btn small{font-weight:500;opacity:.75;font-size:12px}
+.btn svg{width:17px;height:17px}
+
+/* sections */
+section{padding:56px 0}
+.eyebrow{font-size:12.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:8px}
+h2{font-family:Newsreader,Georgia,serif;font-weight:600;font-size:clamp(30px,4vw,42px);letter-spacing:-.02em;line-height:1.1;margin:0 0 18px}
+h3{font-size:19px;letter-spacing:-.01em;margin:30px 0 10px}
+.lead{font-size:18px;color:var(--ink-2);max-width:820px}
+p{margin:0 0 14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.figure{padding:18px;background:#fff;border-radius:var(--radius);border:1px solid var(--line)}
+.figure img{margin:0 auto;border-radius:6px}
+figcaption{font-size:14px;color:var(--muted);margin-top:12px;line-height:1.55;max-width:900px}
+figcaption b{color:var(--ink-2)}
+
+/* teaser */
+.teaser{margin-top:8px}
+.tldr{display:flex;gap:14px;align-items:flex-start;padding:18px 22px;margin-bottom:18px;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:14px;font-size:16.5px;color:var(--ink)}
+.tldr .tag{flex:none;font-size:12px;font-weight:800;letter-spacing:.08em;background:var(--accent);color:#fff;padding:3px 8px;border-radius:6px;margin-top:3px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:22px}
+@media (max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{--tint:var(--accent);position:relative;overflow:hidden;padding:20px 20px 18px;
+  background:radial-gradient(120% 90% at 100% 0%,color-mix(in srgb,var(--tint) 16%,transparent),transparent 60%),
+             linear-gradient(170deg,color-mix(in srgb,var(--tint) 7%,var(--surface)),var(--surface) 75%);
+  border-color:color-mix(in srgb,var(--tint) 28%,var(--line));transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease}
+.stat:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--tint) 55%,var(--line));
+  box-shadow:0 2px 4px rgba(22,23,43,.05),0 14px 34px color-mix(in srgb,var(--tint) 22%,transparent)}
+@media (prefers-reduced-motion:reduce){.stat,.stat:hover{transition:none;transform:none}}
+.stat.s-scope{--tint:var(--t-scope)}.stat.s-acc{--tint:var(--t-acc)}.stat.s-mem{--tint:var(--t-mem)}.stat.s-param{--tint:var(--t-param)}
+.stat .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;margin-bottom:14px;
+  color:var(--tint);background:color-mix(in srgb,var(--tint) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--tint) 28%,transparent)}
+.stat .ic svg{width:18px;height:18px}
+.stat .num{font-size:clamp(28px,3.4vw,38px);font-weight:800;letter-spacing:-.03em;line-height:1.05;color:var(--tint);font-variant-numeric:tabular-nums}
+.stat .num em{font-style:normal;color:inherit}
+.stat .num .unit{font-size:.55em;font-weight:700;letter-spacing:-.01em;margin-left:2px}
+.stat .lbl{font-weight:600;margin-top:6px;font-size:15px}
+.stat .sub{color:var(--muted);font-size:13px;margin-top:2px}
+
+/* abstract */
+.abstract{font-family:Newsreader,Georgia,serif;font-size:20px;line-height:1.6;color:var(--ink);max-width:880px}
+.abstract::first-letter{font-size:3.1em;float:left;line-height:.9;margin:6px 10px 0 0;color:var(--accent);font-weight:600}
+
+/* motivation */
+.question{font-family:Newsreader,Georgia,serif;font-style:italic;font-size:clamp(22px,2.8vw,28px);line-height:1.35;border-left:4px solid var(--accent);padding:6px 0 6px 22px;margin:26px 0;max-width:880px;color:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:820px){.grid2,.grid3{grid-template-columns:1fr}}
+.grid2>*,.grid3>*,.rx-imgs>*{min-width:0}
+.katex-display{overflow-x:auto;overflow-y:hidden;padding:2px 0}
+.prob{padding:22px}
+.prob .k{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--surface-2);font-weight:800;color:var(--accent-ink);margin-bottom:10px}
+.prob h4{margin:0 0 6px;font-size:17px}
+.prob p{color:var(--ink-2);font-size:15px;margin:0}
+
+/* equations */
+.eq{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:14px 0;overflow-x:auto}
+.eq .katex-display{margin:.3em 0}
+.eq-label{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hl-own{color:#534ab7}.hl-route{color:#185fa5}
+:root[data-theme="dark"] .hl-own{color:#a59ef5}:root[data-theme="dark"] .hl-route{color:#78b1ef}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .hl-own{color:#a59ef5}:root:not([data-theme="light"]) .hl-route{color:#78b1ef}}
+
+/* algorithm */
+.algo{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:13.5px;line-height:1.85;padding:18px 20px;overflow-x:auto}
+.algo .hd{font-family:Inter,sans-serif;font-weight:700;font-size:14px;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:8px}
+.algo .ln{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:baseline;white-space:nowrap}
+.algo .no{color:var(--muted);text-align:right}
+.algo .cm{color:#1d9e75;font-size:12.5px;padding-left:18px}
+
+/* chips */
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 14px;font-size:14.5px;flex:1 1 220px}
+.chip b{display:block;font-size:14.5px}
+.chip span{color:var(--muted);font-size:13.5px}
+.chip.main{border-color:var(--peach-line);background:var(--peach)}
+
+/* demo */
+.demo{padding:20px}
+.demo-top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 18px;margin-bottom:10px}
+.demo-top .t{font-weight:700}
+.demo-top .s{color:var(--muted);font-size:13.5px}
+.ctrl{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-left:auto}
+.pill{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:999px;padding:7px 14px;font:600 13.5px Inter,sans-serif;cursor:pointer}
+.pill:hover{border-color:var(--accent)}
+.pill[aria-pressed="true"],.pill.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.range{display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)}
+.range input{accent-color:var(--accent);width:130px}
+#demoSvg{width:100%;height:auto;display:block}
+#demoSvg text{font-family:Newsreader,Georgia,serif}
+.mixbar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin-top:6px;gap:2px}
+.mixbar .a{background:#534ab7}.mixbar .b{background:#185fa5}
+.demo-foot{display:flex;flex-wrap:wrap;gap:6px 20px;font-size:13.5px;color:var(--ink-2);margin-top:10px;align-items:center}
+.demo-foot .mix{flex:1 1 100%;max-width:none;margin-top:4px}
+.mixtex{font-size:16px;min-height:30px;overflow-x:auto;overflow-y:hidden;white-space:nowrap;color:var(--ink)}
+.mixtex .katex{white-space:nowrap}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2)}
+.legend i{display:inline-block;width:14px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;border:1px solid}
+
+/* theory */
+.thm{padding:20px 22px;position:relative}
+.thm .tt{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-ink)}
+.thm h4{margin:4px 0 8px;font-size:17px}
+.thm p{font-size:14.5px;color:var(--ink-2);margin:0 0 6px}
+.thm .math{overflow-x:auto;font-size:14.5px;padding:8px 0 2px}
+
+/* tabs */
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 14px}
+.tab{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;padding:7px 14px;font:600 14px Inter,sans-serif;cursor:pointer}
+.tab:hover{color:var(--ink);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.subtabs .tab{padding:5px 12px;font-size:13px;border-radius:999px}
+
+/* tables */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+table.res{border-collapse:collapse;width:100%;font-size:14px;font-variant-numeric:tabular-nums}
+table.res th,table.res td{padding:9px 10px;text-align:center;white-space:nowrap}
+table.res th{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:none;background:var(--surface-2);border-bottom:1px solid var(--line)}
+table.res td:first-child,table.res th:first-child{text-align:left;padding-left:16px;position:sticky;left:0;background:inherit}
+table.res tbody tr{background:var(--surface);border-bottom:1px solid var(--line)}
+table.res tbody tr:last-child{border-bottom:0}
+table.res tr.moc{background:var(--peach)}
+table.res tr.moc td:first-child{font-weight:700;color:var(--peach-ink)}
+table.res td.best{font-weight:800;color:var(--ink)}
+table.res td .d{display:block;font-size:10.5px;line-height:1.1;font-weight:600}
+table.res td .d.u{color:var(--up)}table.res td .d.n{color:var(--dn)}
+table.res td.sep,table.res th.sep{border-left:1px solid var(--line)}
+table.res .pub{color:var(--muted);font-weight:400}
+.tnote{font-size:13px;color:var(--muted);margin-top:10px}
+
+/* highlight: MoC vs MoLEx on Qwen2.5-14B */
+.hlx{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:22px;padding:24px;margin:6px 0 26px;border-color:var(--peach-line);background:linear-gradient(135deg,var(--peach),var(--surface) 70%)}
+@media (max-width:820px){.hlx{grid-template-columns:1fr}}
+.hlx .k{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--peach-ink)}
+.hlx h3{margin:6px 0 8px;font-size:22px;line-height:1.25;text-wrap:balance}
+.hlx p{font-size:14.5px;color:var(--ink-2);margin:0}
+.cmp{display:grid;gap:14px;align-content:center}
+.cmp-row{display:grid;grid-template-columns:118px minmax(0,1fr) 100px;gap:10px;align-items:center;font-size:13.5px}
+.cmp-row .m{font-weight:700;color:var(--ink-2)}
+.cmp-bars{display:grid;gap:5px}
+.cmp-bar{height:14px;border-radius:0 4px 4px 0;background:color-mix(in srgb,var(--muted) 45%,transparent);display:flex;align-items:center}
+.cmp-bar.moc{background:var(--accent)}
+.cmp-bar span{font-size:11px;color:var(--ink-2);padding-left:calc(100% + 6px);white-space:nowrap;font-variant-numeric:tabular-nums}
+.cmp-row .delta{font-weight:800;font-size:15px;color:var(--up);font-variant-numeric:tabular-nums;text-align:right}
+.cmp-legend{display:flex;gap:16px;font-size:12.5px;color:var(--muted)}
+.cmp-legend i{display:inline-block;width:12px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+@media (max-width:640px){.cmp-row{grid-template-columns:84px minmax(0,1fr) 64px}.cmp-bar span{display:none}}
+
+/* bar small multiples */
+.sm{padding:18px 18px 14px;margin-top:16px}
+.sm-head{display:grid;grid-template-columns:110px repeat(3,1fr);gap:14px;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:6px}
+.sm-row{display:grid;grid-template-columns:110px repeat(3,1fr);gap:14px;align-items:center;height:30px;border-radius:8px;position:relative}
+.sm-row:hover{background:var(--surface-2)}
+.sm-row .lab{font-size:13.5px;font-weight:500;padding-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sm-row.moc .lab{font-weight:800;color:var(--peach-ink)}
+.track{position:relative;height:100%}
+.track .bar{position:absolute;left:0;top:9px;height:12px;border-radius:0 4px 4px 0;background:color-mix(in srgb,var(--muted) 45%,transparent)}
+.track .dotm{position:absolute;top:50%;width:11px;height:11px;margin:-5.5px 0 0 -5.5px;border-radius:50%;background:var(--muted);box-shadow:0 0 0 2px var(--surface)}
+.track .stem{position:absolute;left:0;top:50%;height:2px;margin-top:-1px;background:color-mix(in srgb,var(--muted) 30%,transparent)}
+.sm-row.moc .bar,.sm-row.moc .dotm{background:var(--accent)}
+.sm-row.moc .stem{background:color-mix(in srgb,var(--accent) 40%,transparent)}
+.track .v{position:absolute;top:50%;transform:translateY(-50%);font-size:11.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;padding-left:6px;white-space:nowrap}
+.sm-axis{display:grid;grid-template-columns:110px repeat(3,1fr);gap:14px;font-size:11px;color:var(--muted);margin-top:4px}
+.sm-axis div{display:flex;justify-content:space-between}
+@media (max-width:640px){.sm-head,.sm-row,.sm-axis{grid-template-columns:76px repeat(3,1fr);gap:8px}.track .v{display:none}.sm-row .lab{font-size:12px}}
+.tip{position:fixed;z-index:80;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;padding:8px 10px;border-radius:8px;box-shadow:var(--shadow);opacity:0;transition:opacity .1s;font-variant-numeric:tabular-nums;line-height:1.5}
+.tip b{font-weight:700}
+
+/* routing explorer */
+.rx{padding:18px}
+.rx-ctrls{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;margin-bottom:12px}
+.rx-ctrls .g{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);font-weight:600}
+.rx-imgs{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;align-items:start}
+@media (max-width:900px){.rx-imgs{grid-template-columns:1fr}}
+.rx-imgs .figure{padding:12px}
+.rx-imgs .stack{display:grid;gap:12px}
+.rx-imgs .cap{font-size:12.5px;color:var(--muted);margin:6px 2px 0}
+
+/* bibtex */
+.bib{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.bib pre{margin:0;padding:22px;overflow-x:auto;font:13.5px/1.7 "JetBrains Mono",ui-monospace,monospace;color:var(--ink-2)}
+.copy{position:absolute;top:12px;right:12px}
+
+footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--muted);font-size:13.5px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:10px 30px;justify-content:space-between}
+.ack{font-size:14.5px;color:var(--ink-2);max-width:880px}
+
+.reveal{transition:transform .6s ease}
+.reveal:not(.in){transform:translateY(10px)}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}}
+.divider{height:1px;background:var(--line);max-width:var(--maxw);margin:0 auto}
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="brand-mark"><svg width="16" height="16" viewBox="0 0 32 32"><path d="M6 24V8l10 10 10-10v16" stroke="#fff" stroke-width="3.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>MoC</a>
+    <div class="nav-links">
+      <a href="#abstract">Abstract</a>
+      <a href="#method">Method</a>
+      <a href="#theory">Theory</a>
+      <a href="#results">Results</a>
+      <a href="#ablations">Ablations</a>
+      <a href="#routing">Routing</a>
+      <a href="#citation">BibTeX</a>
+    </div>
+    <button class="theme-btn" id="themeBtn" aria-label="Toggle dark mode" title="Toggle theme">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-bg" aria-hidden="true">
+    <svg viewBox="0 0 1200 560" preserveAspectRatio="xMidYMid slice">
+      <g id="heroNodes"></g>
+    </svg>
+  </div>
+  <div class="wrap">
+    <h1 class="title"><span class="grad">Mixture-of-Control:</span><span class="grad sub">State-Aware Fine-Tuning for Transformer-based Models</span></h1>
+    <span class="badge"><span class="dot"></span>NeurIPS 2026</span>
+
+    <div class="authors">
+      <span>Duc-Anh Nguyen<sup>1,2,*,†</sup></span>
+      <span>Tien Ngoc Luu<sup>1,*</sup></span>
+      <span>Tung Pham<sup>1</sup></span>
+      <span>Toan Tran<sup>1,✉</sup></span>
+    </div>
+    <div class="affils">
+      <span><sup>1</sup>Qualcomm AI Research<sup>‡</sup></span>
+      <span><sup>2</sup>University of Virginia</span>
+    </div>
+    <div class="notes">
+      <span>* Equal contribution</span>
+      <span>† Work done during an internship at Qualcomm</span>
+      <span>✉ Corresponding author</span>
+    </div>
+    <div class="notes" style="margin-top:2px">
+      <span>‡ Qualcomm AI Research is an initiative of Qualcomm Technologies, Inc.</span>
+    </div>
+
+    <div class="btns" id="btns"></div>
+  </div>
+</header>
+
+<section style="padding-top:8px">
+  <div class="wrap teaser reveal">
+    <div class="tldr"><span class="tag">TL;DR</span><span>MoC turns each block's lightweight <b>control state</b> into an <b>expert</b>. A shared sparse gate lets every block borrow control from other blocks, so information flows across depth. Pretrained blocks are never re-run, and memory stays at the level of state-based tuning.</span></div>
+    <figure class="figure" style="margin:0">
+      <img src="static/images/MoC_architecture.svg" alt="MoC architecture: pretrained blocks f, local controls g, and a shared gate that routes control experts across blocks" width="919" height="276" style="width:100%">
+    </figure>
+    <figcaption><b>Overview of Mixture-of-Control.</b> At block <i>i</i>, the frozen pretrained block <i>f<sub>i</sub></i> and the local control block <i>g<sub>i</sub></i> process the representation in parallel. A shared gate selects the Top-<i>K</i> control blocks from all layers, and the selected controller is fused with the local one to form the block's control signal. The figure uses Top-<i>K</i> = 1, with <i>x</i><sub>1</sub> and then <i>x</i><sub>2</sub> as inputs.</figcaption>
+
+    <div class="stats">
+      <div class="card stat s-scope"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></div><div class="num"><em>33</em> / <em>10</em></div><div class="lbl">datasets / pretrained backbones</div><div class="sub">NLG, NLU (GLUE), and vision (VTAB-1K)</div></div>
+      <div class="card stat s-acc"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div><div class="num">+5.3</div><div class="lbl">avg. accuracy over LoRA</div><div class="sub">Mistralv3-7B commonsense, 80.2 → 85.5</div></div>
+      <div class="card stat s-mem"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg></div><div class="num">½<span class="unit"> memory</span></div><div class="lbl">of MoLEx, with +2.3 pts accuracy</div><div class="sub">Qwen2.5-14B: 61.3 vs. 124.8 GB, 90.1 vs. 87.8 avg.</div></div>
+      <div class="card stat s-param"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></div><div class="num">≤0.51%</div><div class="lbl">trainable parameters</div><div class="sub">Best average on all 4 LLM backbones</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="abstract">
+  <div class="wrap reveal">
+    <div class="eyebrow">Abstract</div>
+    <p class="abstract">State-based fine-tuning has emerged as a compelling alternative to weight-based adaptation for transformers. It updates lightweight controls into states rather than model weights, offering substantial memory savings while retaining parameter efficiency. However, most existing state-based methods apply only per-block control updates, which limits inter-block information exchange and restricts representational adaptation. Meanwhile, prior mechanisms that enable cross-block communication often introduce considerable computational overhead, reducing their practicality for efficient fine-tuning. We introduce Mixture-of-Control (MoC), an efficient cross-layer communication mechanism that adaptively integrates local and global control signals to enhance representation learning during adaptation. MoC treats block-wise control states as experts in a sparse mixture-of-experts process, enabling efficient communication across transformer blocks. Experiments on 33 datasets and 10 pretrained models across diverse transformer-based benchmarks demonstrate that MoC consistently outperforms existing state-based fine-tuning methods while maintaining comparable efficiency in memory and compute.</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="motivation">
+  <div class="wrap reveal">
+    <div class="eyebrow">Motivation</div>
+    <h2>Two gaps in efficient fine-tuning</h2>
+    <div class="grid2">
+      <div class="card prob"><div class="k">1</div><h4>Control stays local to each block</h4><p>LoRA variants and state-based methods such as Parallel Control adapt each block in isolation. With weak global coordination across depth, structured representation adaptation is limited.</p></div>
+      <div class="card prob"><div class="k">2</div><h4>Cross-layer communication is costly</h4><p>MoLEx mixes layers by re-running pretrained blocks, which adds extra forward passes. On Qwen2.5-14B it needs 124.8 GB and 20.3 h of training, versus 62.1 GB and 9.4 h for LoRA.</p></div>
+    </div>
+    <p class="question">“How can state-based fine-tuning capture deep cross-layer interactions without sacrificing its core advantage, memory efficiency?”</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="method">
+  <div class="wrap reveal">
+    <div class="eyebrow">Method</div>
+    <h2>Control states as experts</h2>
+    <p class="lead">Viewed through control theory, a transformer forward pass is a discretized feedback system. The pretrained block supplies the intrinsic dynamics, and a low-rank adapter acts as the control term. MoC lets that control come both from the block itself and from other blocks.</p>
+
+    <h3>From local control to generalized state-based tuning</h3>
+    <div class="eq">
+      <div class="eq-label">Parallel Control (block-local)</div>
+      $$x_{t+1} = x_t + f_t(W_t x_t) + g_t(x_t)$$
+    </div>
+    <div class="eq">
+      <div class="eq-label">Generalized state-based update</div>
+      $$x_{t+1} = x_t + f_t(W_t x_t) + \alpha\, g_t(x_t) + (1-\alpha)\, g_{h_t}(x_t)$$
+      <p style="font-size:14.5px;color:var(--ink-2);margin:4px 0 0">Here $g_{h_t}$ is a control borrowed from another block $h_t$. Setting $h_t = t$ recovers standard state-based tuning, and $h_t \neq t$ enables cross-block communication through lightweight low-rank controls instead of full-block reuse.</p>
+    </div>
+
+    <h3>Mixture-of-Control</h3>
+    <div class="grid2" style="align-items:start">
+      <div>
+        <div class="eq">
+          <div class="eq-label">MoC update</div>
+          $$x_{t+1} = x_t + f_t(W_t x_t) + \alpha\, {\color{#534ab7} g_t(x_t)} + (1-\alpha)\sum_{k=1}^{L} \pi_k(x_t)\, {\color{#185fa5} g_k(x_t)}$$
+          <div class="eq-label" style="margin-top:6px">Sparse routing with a shared gate</div>
+          $$\pi_k(x_t) = \operatorname{softmax}\!\big(\operatorname{TopK}(\mathbf{W}_{\text{gate}}\, x_t)\big)_k$$
+        </div>
+        <p style="font-size:15px;color:var(--ink-2)">The control modules $\{g_k\}_{k=1}^{L}$ of all blocks form one expert pool. A single gating matrix $\mathbf{W}_{\text{gate}}$, shared across layers, routes each block's state to its Top-$K$ experts. A load-balancing loss keeps expert usage even. Training uses <b>batch-level routing</b>, which aggregates token scores by mean or mode. At inference, each sample is routed from its own prefix.</p>
+      </div>
+      <div class="card algo">
+        <div class="hd">Algorithm 1 · MoC forward pass at block $t$</div>
+        <div class="ln"><span class="no">1</span><span><span class="hl-own">p_own</span> ← g_t(x_t)</span><span class="cm">// layer-dedicated expert</span></div>
+        <div class="ln"><span class="no">2</span><span>π ← softmax(gate(x_t))</span><span class="cm">// dense routing</span></div>
+        <div class="ln"><span class="no">3</span><span>S_k ← TopK(π, k)</span><span class="cm">// expert selection</span></div>
+        <div class="ln"><span class="no">4</span><span>π_i ← π_i / Σ<sub>j∈S_k</sub> π_j</span><span class="cm">// re-normalize</span></div>
+        <div class="ln"><span class="no">5</span><span><span class="hl-route">p_route</span> ← Σ<sub>i∈S_k</sub> π_i · g_i(x_t)</span><span class="cm">// sparse aggregation</span></div>
+        <div class="ln"><span class="no">6</span><span>g_moc ← α·<span class="hl-own">p_own</span> + (1−α)·<span class="hl-route">p_route</span></span><span class="cm">// control signal</span></div>
+        <div class="ln"><span class="no">7</span><span>x_{t+1} ← x_t + f_t(x_t) + g_moc</span><span class="cm">// update</span></div>
+        <div class="ln"><span class="no">8</span><span>return x_{t+1}</span><span></span></div>
+      </div>
+    </div>
+
+    <h3>See it route</h3>
+    <div class="card demo">
+      <div class="demo-top">
+        <div><div class="t">Interactive illustration</div><div class="s">Each block's state queries the shared gate, which picks its Top-K control experts from anywhere in depth. Gate scores here are random, not learned.</div></div>
+        <div class="ctrl">
+          <span class="range">Top-K <span class="tabs subtabs" style="margin:0" id="demoK"><button class="tab" data-v="1" aria-selected="true">1</button><button class="tab" data-v="2" aria-selected="false">2</button><button class="tab" data-v="3" aria-selected="false">3</button></span></span>
+          <button class="pill" id="demoPlay" aria-pressed="true">Pause</button>
+          <button class="pill" id="demoStep">Step</button>
+          <label class="range">α <input type="range" id="alpha" min="0.5" max="0.99" step="0.01" value="0.95"><b id="alphaVal">0.95</b></label>
+        </div>
+      </div>
+      <svg id="demoSvg" viewBox="0 0 960 380" role="img" aria-label="Animated illustration of MoC routing a control expert from another block"></svg>
+      <div class="demo-foot">
+        <div class="legend">
+          <span><i style="background:var(--f-fill);border-color:var(--f-stroke)"></i>Frozen block $f$</span>
+          <span><i style="background:var(--g-fill);border-color:var(--g-stroke)"></i>Control expert $g$</span>
+          <span><i style="background:var(--gate-fill);border-color:var(--gate-stroke)"></i>Shared gate scores π</span>
+          <span><i style="background:var(--arc);border-color:var(--arc)"></i>Selected experts</span>
+        </div>
+        <div class="mix">
+          <div id="mixText" class="mixtex"></div>
+          <div class="mixbar"><span class="a" id="mixA" style="flex:95"></span><span class="b" id="mixB" style="flex:5"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Variants</h3>
+    <div class="chips">
+      <div class="chip"><b>MoC (ATTN)</b><span>routes controls in attention blocks</span></div>
+      <div class="chip"><b>MoC (FFN)</b><span>routes controls in FFN blocks</span></div>
+      <div class="chip"><b>MoC (ATTN+FFN, w/o sharing)</b><span>separate gates for ATTN and FFN</span></div>
+      <div class="chip main"><b>MoC (ATTN+FFN) · default</b><span>one shared gate coordinates both pathways</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="theory">
+  <div class="wrap reveal">
+    <div class="eyebrow">Theory</div>
+    <h2>Why routing control helps</h2>
+    <p class="lead">Under mild assumptions, MoC keeps MoLEx's expressivity and is provably better behaved than block-local Parallel Control. Its forward dynamics are more stable, its gradients flow better, and its representation error is lower.</p>
+    <div class="grid2" style="margin-top:20px">
+      <div class="card thm"><div class="tt">Theorem 4.1</div><h4>MoLEx expressivity via state controls</h4><p>If $\alpha &gt; \tfrac12$ and $z_1 = x_1$, there exist controls $g_k$ that reproduce the MoLEx trajectory. The match is exact for linear $f_k$, and the error vanishes for smooth nonlinear $f_k$ under small perturbations $\|\Delta W'_t\| &lt; \xi$.</p><div class="math">$$z_t = x_t\ \ \forall t \quad\text{(linear)},\qquad \mathbb{E}\|z_t-x_t\|^2 \xrightarrow{\ \xi\to 0\ } 0$$</div></div>
+      <div class="card thm"><div class="tt">Proposition · Stability</div><h4>Tighter one-step growth</h4><p>With the routed magnitude $\beta_K(x_t)=\sum_{k\in S_K}\pi_k\beta_k$ and $\mathbb{E}[\beta_K\mid x_t]&lt;\beta_t$, which the load-balancing loss encourages, MoC's expected growth factor is strictly smaller:</p><div class="math">$$1+L_f+\big[\alpha\beta_t+(1-\alpha)\,\mathbb{E}[\beta_K]\big]\gamma \;<\; 1+L_f+\beta_t\gamma$$</div></div>
+      <div class="card thm"><div class="tt">Corollary · Gradient flow</div><h4>Better-conditioned backpropagation</h4><p>Each layerwise Jacobian norm has a tighter bound, $M_t \le M_t^c$. The bound on the backpropagated product shrinks with depth accordingly:</p><div class="math">$$\prod_{t=1}^{L}\|J_t\| \;\le\; \prod_{t=1}^{L} M_t \;\le\; \prod_{t=1}^{L} M_t^{c}$$</div></div>
+      <div class="card thm"><div class="tt">Proposition · Representation</div><h4>Closer to the ideal control</h4><p>Mixing several routed experts brings the control signal closer to the task-optimal signal $\Delta W^* x$ than block-local control alone:</p><div class="math">$$\bar\epsilon^2 \;\le\; \alpha\,\bar\epsilon_c^2 + (1-\alpha)\,\bar\epsilon_K^2 \;<\; \bar\epsilon_c^2$$</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="results">
+  <div class="wrap reveal">
+    <div class="eyebrow">Results</div>
+    <h2>Commonsense reasoning</h2>
+    <p class="lead">Commonsense reasoning is shown here as the representative benchmark: 8 datasets (BoolQ, PIQA, SIQA, HellaSwag, WinoGrande, ARC-e/c, OBQA) on four LLM backbones. MoC is compared with LoRA, DoRA, MoLEx, FacT_TK, StructLoRA, FlexLoRA, and Parallel Control (“Control”). Each column's best accuracy is in bold. Small numbers show the change relative to LoRA. <span class="pub">*</span> marks previously published numbers. Results on GLUE (RoBERTa, DeBERTa) and VTAB-1K (ViT-Tiny, ViT-Base), where MoC also achieves the best average, are in the paper.</p>
+
+    <div class="card hlx">
+      <div>
+        <div class="k">Highlight · Qwen2.5-14B</div>
+        <h3>Half the training memory of MoLEx, and higher accuracy</h3>
+        <p>MoLEx communicates across layers by re-running pretrained blocks. MoC exchanges only lightweight control states, so it needs about half the GPU memory, trains 2.5× faster, and gains <b>+2.3</b> points in average accuracy. Under a matched parameter budget (paper appendix), the gap is 116.3 GB vs. 61.3 GB and <b>+2.5</b> points.</p>
+      </div>
+      <div class="cmp" role="img" aria-label="MoLEx versus MoC on Qwen2.5-14B: memory 124.8 vs 61.3 GB, time 20.3 vs 8.0 hours, accuracy 87.8 vs 90.1">
+        <div class="cmp-legend"><span><i style="background:color-mix(in srgb,var(--muted) 45%,transparent)"></i>MoLEx</span><span><i style="background:var(--accent)"></i>MoC</span></div>
+        <div class="cmp-row"><span class="m">GPU memory ↓</span><div class="cmp-bars"><div class="cmp-bar" style="width:80%"><span>124.8 GB</span></div><div class="cmp-bar moc" style="width:39.3%"><span>61.3 GB</span></div></div><span class="delta">−51%</span></div>
+        <div class="cmp-row"><span class="m">Training time ↓</span><div class="cmp-bars"><div class="cmp-bar" style="width:80%"><span>20.3 h</span></div><div class="cmp-bar moc" style="width:31.5%"><span>8.0 h</span></div></div><span class="delta">2.5× faster</span></div>
+        <div class="cmp-row"><span class="m">Avg. accuracy ↑</span><div class="cmp-bars"><div class="cmp-bar" style="width:78%"><span>87.8</span></div><div class="cmp-bar moc" style="width:80%"><span>90.1</span></div></div><span class="delta">+2.3 pts</span></div>
+      </div>
+    </div>
+
+    <div class="tabs subtabs" id="modelTabs"></div>
+    <div class="tbl-wrap"><table class="res" id="resTable"></table></div>
+    <div class="tnote" id="tnote"></div>
+
+    <div class="card sm" id="smCard">
+      <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;margin-bottom:12px">
+        <div><b id="smTitle">Accuracy vs. cost</b> <span style="color:var(--muted);font-size:13.5px">· MoC highlighted · hover for values</span></div>
+      </div>
+      <div class="sm-head"><div></div><div>Avg. accuracy (%) ↑</div><div id="smTimeH">Training time (h) ↓</div><div>GPU memory (GB) ↓</div></div>
+      <div id="smRows"></div>
+      <div class="sm-axis" id="smAxis"></div>
+    </div>
+
+    <h3 style="margin-top:44px">Inference throughput</h3>
+    <figure class="figure" style="margin:0">
+      <img src="static/images/inference_throughput_moc_comparison.png" alt="Inference throughput versus batch size for LLaMA2-7B, LLaMA3-8B, Mistralv3-7B and Qwen2.5-14B" loading="lazy" width="2400" height="766">
+    </figure>
+    <figcaption><b>Inference throughput across LLMs and batch sizes.</b> State-based methods remain slower than fully merged weight-based adapters, which are shaded as an upper bound. MoC stays close to Control and well above MoLEx, which narrows the gap to mergeable fine-tuning.</figcaption>
+
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="ablations">
+  <div class="wrap reveal">
+    <div class="eyebrow">Ablations</div>
+    <h2>What makes MoC work</h2>
+    <figure class="figure" style="margin:0">
+      <img src="static/images/ablation_hyperparams.png" alt="Ablations on number of activated experts, Top-K, alpha, and lambda" loading="lazy" width="2400" height="494">
+    </figure>
+    <figcaption><b>(a)</b> Training time and GPU memory grow moderately with the number of activated experts on Mistralv3-7B, and stay well below MoLEx. <b>(b)</b> Two activated experts work best: the local controller plus one routed controller (Top-<i>K</i> = 1). <b>(c)</b> MoC is robust to the mixing coefficient α and peaks at α = 0.95. <b>(d)</b> Load balancing helps, and performance peaks at λ = 0.01.</figcaption>
+
+    <div class="grid2" style="margin-top:28px">
+      <div>
+        <h3 style="margin-top:0">Cross-layer communication design</h3>
+        <div class="tbl-wrap"><table class="res" id="tRouting"></table></div>
+        <p class="tnote">Mistralv3-7B-Instruct. All communication variants beat local Control, and adaptive routing with load balancing adds +1.1 points on top.</p>
+      </div>
+      <div>
+        <h3 style="margin-top:0">MoC variants</h3>
+        <div class="tbl-wrap"><table class="res" id="tVariants"></table></div>
+        <p class="tnote">Average commonsense accuracy. FFN control beats attention-only, and a shared ATTN+FFN gate is best.</p>
+      </div>
+      <div>
+        <h3 style="margin-top:0">Expert-pool size</h3>
+        <div class="tbl-wrap"><table class="res" id="tPool"></table></div>
+        <p class="tnote">Mistralv3-7B-Instruct. More groups mean smaller routing pools. A broader pool improves accuracy at almost the same cost.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="routing">
+  <div class="wrap reveal">
+    <div class="eyebrow">Analysis</div>
+    <h2>Where does control come from?</h2>
+    <p class="lead">Routing maps for LLaMA3-8B show that MoC does not stay with the current layer's control. It often selects experts from distant layers, and the patterns differ by task, so the model learns to aggregate cross-layer information.</p>
+    <div class="card rx">
+      <div class="rx-ctrls">
+        <div class="g">Expert type
+          <span class="tabs subtabs" style="margin:0" id="rxType">
+            <button class="tab" data-v="attn" aria-selected="false">Attention</button>
+            <button class="tab" data-v="ffn" aria-selected="true">FFN</button>
+          </span>
+        </div>
+        <div class="g">Top-K
+          <span class="tabs subtabs" style="margin:0" id="rxK">
+            <button class="tab" data-v="1" aria-selected="true">1</button>
+            <button class="tab" data-v="3" aria-selected="false">3</button>
+            <button class="tab" data-v="7" aria-selected="false">7</button>
+          </span>
+        </div>
+      </div>
+      <div class="rx-imgs">
+        <div>
+          <div class="figure"><img id="rxGrid" src="static/images/grid_ffn_llama3_top1_all_datasets.png" alt="Routing heatmaps" loading="lazy" width="1500" height="1518"></div>
+          <p class="cap" id="rxGridCap"></p>
+        </div>
+        <div class="stack">
+          <div><div class="figure"><img id="rxBarA" src="static/images/barchart_crosstype_attn_llama3_top1.png" alt="Cross-type routing from attention" loading="lazy" width="1500" height="743"></div><p class="cap">(a) Cross-type routing when the local control comes from <b>Attention</b> blocks</p></div>
+          <div><div class="figure"><img id="rxBarB" src="static/images/barchart_crosstype_ffn_llama3_top1.png" alt="Cross-type routing from FFN" loading="lazy" width="1500" height="743"></div><p class="cap">(b) Cross-type routing when the local control comes from <b>FFN</b> blocks</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="citation">
+  <div class="wrap reveal">
+    <div class="eyebrow">Citation</div>
+    <h2>BibTeX</h2>
+    <div class="bib">
+      <button class="pill copy" id="copyBib">Copy</button>
+<pre id="bibtex">@inproceedings{nguyen2026mixture,
+  title     = {Mixture-of-Control: State-Aware Fine-Tuning for Transformer-based Models},
+  author    = {Nguyen, Duc-Anh and Luu, Tien Ngoc and Pham, Tung and Tran, Toan},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2026}
+}</pre>
+    </div>
+    <h3 style="margin-top:36px">Acknowledgements</h3>
+    <p class="ack">This research was conducted in part at Qualcomm AI Research, an initiative of Qualcomm Technologies, Inc., with research resources provided by the company.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 The MoC authors. Qualcomm AI Research is an initiative of Qualcomm Technologies, Inc.</span>
+    <span>Inspired by <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a> and the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template">Academic Project Page Template</a>. Licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>.</span>
+  </div>
+</footer>
+
+<div class="tip" id="tip"></div>
+
+<script>
+/* ---------- Links: fill these in when available; empty = "coming soon" ---------- */
+const LINKS = {
+  paper: "https://neurips.cc/virtual/2026/loc/sydney/poster/148178",
+  arxiv: "https://arxiv.org/abs/2606.31397",
+  code:  "",   // e.g. "https://github.com/duc-anh-2002/Mixture-of-Control"
+};
+
+const ICONS = {
+  paper:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>',
+  arxiv:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l14 16M19 4L12.5 11.5M5 20l4-4.5"/></svg>',
+  code:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>',
+  bib:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 11H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v7a5 5 0 0 1-4 5M20 11h-4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v7a5 5 0 0 1-4 5"/></svg>',
+};
+(function buildButtons(){
+  const items=[["paper","Paper",LINKS.paper],["arxiv","arXiv",LINKS.arxiv],["code","Code",LINKS.code]];
+  const el=document.getElementById("btns");
+  el.innerHTML=items.map(([k,l,h],i)=>h
+    ? `<a class="btn${i?' ghost':''}" href="${h}" target="_blank" rel="noopener">${ICONS[k]}${l}</a>`
+    : `<span class="btn ghost soon">${ICONS[k]}${l} <small>soon</small></span>`).join("")
+    + `<a class="btn ghost" href="#citation">${ICONS.bib}BibTeX</a>`;
+})();
+
+/* ---------- theme ---------- */
+(function(){
+  const root=document.documentElement, btn=document.getElementById("themeBtn");
+  try{const t=localStorage.getItem("moc-theme"); if(t) root.dataset.theme=t;}catch(e){}
+  btn.addEventListener("click",()=>{
+    const dark = root.dataset.theme ? root.dataset.theme==="dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    try{localStorage.setItem("moc-theme",root.dataset.theme);}catch(e){}
+  });
+})();
+
+/* ---------- nav state + reveal ---------- */
+(function(){
+  const nav=document.getElementById("nav");
+  addEventListener("scroll",()=>nav.classList.toggle("scrolled",scrollY>8),{passive:true});
+  const links=[...document.querySelectorAll(".nav-links a")];
+  const io=new IntersectionObserver(es=>es.forEach(e=>{
+    if(e.isIntersecting){links.forEach(a=>a.classList.toggle("active",a.getAttribute("href")==="#"+e.target.id));}
+  }),{rootMargin:"-45% 0px -50% 0px"});
+  links.forEach(a=>{const s=document.querySelector(a.getAttribute("href")); s&&io.observe(s);});
+  const rv=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");rv.unobserve(e.target);}}),{threshold:.08});
+  document.querySelectorAll(".reveal").forEach(n=>rv.observe(n));
+})();
+
+/* ---------- hero background: layer columns with routing arcs ---------- */
+(function(){
+  const g=document.getElementById("heroNodes"), ns="http://www.w3.org/2000/svg";
+  const cols=[70,190,1010,1130], rows=[90,170,250,330,410,490];
+  let html="";
+  // arcs between non-adjacent layers on each side
+  [[0,3],[1,5],[0,4],[2,5]].forEach(([a,b],i)=>{
+    const x=cols[i%2], y1=rows[a], y2=rows[b], bend=60+20*(b-a);
+    html+=`<path class="arc${i%2?' b':''}" d="M${x} ${y1} C ${x+bend} ${y1}, ${x+bend} ${y2}, ${x} ${y2}"/>`;
+  });
+  [[1,4],[0,2],[3,5],[0,5]].forEach(([a,b],i)=>{
+    const x=cols[2+i%2], y1=rows[a], y2=rows[b], bend=60+20*(b-a);
+    html+=`<path class="arc${i%2?'':' b'}" d="M${x} ${y1} C ${x-bend} ${y1}, ${x-bend} ${y2}, ${x} ${y2}"/>`;
+  });
+  cols.forEach((x,c)=>rows.forEach(y=>{html+=`<rect class="node${c%2?' g':''}" x="${x-18}" y="${y-12}" width="36" height="24" rx="7"/>`;}));
+  g.innerHTML=html;
+})();
+
+/* ---------- interactive routing illustration ---------- */
+(function(){
+  const svg=document.getElementById("demoSvg");
+  const L=8, X0=72, DX=116, yF=58, yG=212, yGate=322, W=70, H=42;
+  const sub=n=>String(n).split("").map(d=>"₀₁₂₃₄₅₆₇₈₉"[d]).join("");
+  let cur=0, alpha=.95, K=1, playing=true, timer=null, pi=[], sel=[];
+  function sampleRoute(){
+    // random gate logits with a few "spiky" favourites; the block's own expert is already the local term
+    const z=[...Array(L)].map((_,k)=>k===cur?-Infinity:Math.random()*2.2+(Math.random()<.25?2.4:0));
+    const m=Math.max(...z), e=z.map(v=>Math.exp(v-m)), S=e.reduce((a,b)=>a+b,0);
+    pi=e.map(v=>v/S);
+    const idx=[...pi.keys()].sort((a,b)=>pi[b]-pi[a]).slice(0,K);
+    const Z=idx.reduce((a,k)=>a+pi[k],0);
+    sel=idx.map(k=>({k,w:pi[k]/Z}));
+  }
+  function draw(){
+    const xc=X0+DX*cur, gx0=X0-W/2-8, gx1=X0+DX*(L-1)+W/2+8;
+    let s=`<defs>
+      <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M0 0L10 5L0 10z" fill="#534ab7"/></marker>
+      <marker id="ahr" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--arc)"/></marker>
+      <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--arc-2)"/></marker></defs>`;
+    s+=`<rect x="14" y="150" width="932" height="222" rx="18" fill="var(--surface-2)" stroke="var(--line)" stroke-dasharray="5 5"/>
+        <text x="30" y="364" font-family="Inter" font-size="11.5" font-weight="600" fill="var(--muted)">Inter-block communication (control experts only, no pretrained block is re-run)</text>`;
+    s+=`<line x1="14" y1="${yF}" x2="946" y2="${yF}" stroke="var(--ink-2)" stroke-width="1.3" opacity=".45"/>`;
+    // gate with per-expert score bars
+    s+=`<rect x="${gx0}" y="${yGate-38}" width="${gx1-gx0}" height="60" rx="10" fill="var(--gate-fill)" stroke="var(--gate-stroke)" stroke-width="2"/>`;
+    const selSet=new Set(sel.map(o=>o.k)), base=yGate+14, maxH=40;
+    for(let k=0;k<L;k++){
+      const x=X0+DX*k, h=Math.max(1.5,pi[k]*maxH/Math.max(...pi)), on=selSet.has(k);
+      if(k===cur){s+=`<text x="${x}" y="${base-4}" text-anchor="middle" font-family="Inter" font-size="10.5" fill="#8a7a3a">local</text>`;continue;}
+      s+=`<rect x="${x-14}" y="${base-h}" width="28" height="${h}" rx="3" fill="${on?'var(--arc)':'#cdbf8c'}" opacity="${on?1:.75}"><animate attributeName="height" from="0" to="${h}" dur=".35s"/><animate attributeName="y" from="${base}" to="${base-h}" dur=".35s"/></rect>`;
+      if(on) s+=`<text x="${x+18}" y="${base-h+9}" font-family="Inter" font-size="11" font-weight="700" fill="#5b3f78">${pi[k].toFixed(2)}</text>`;
+    }
+    s+=`<text x="${gx0+10}" y="${yGate-24}" font-size="14" fill="#3a3320"><tspan font-weight="700">W</tspan><tspan font-size="10" dy="3">gate</tspan><tspan dy="-3" font-family="Inter" font-size="11.5" fill="#6b5f2a"> scores π(x${sub(cur+1)})</tspan></text>`;
+    for(let t=0;t<L;t++){
+      const x=X0+DX*t, active=t===cur, on=selSet.has(t);
+      s+=`<rect x="${x-W/2}" y="${yF-H/2}" width="${W}" height="${H}" rx="9" fill="var(--f-fill)" stroke="var(--f-stroke)" stroke-width="${active?2.6:1.3}" opacity="${active?1:.75}"/>
+          <text x="${x}" y="${yF+6}" text-anchor="middle" font-size="18" font-style="italic" fill="#1d2b4a">f<tspan font-size="11" dy="4">${t+1}</tspan></text>
+          <text x="${x+W/2-8}" y="${yF-H/2+4}" font-size="12">❄</text>`;
+      s+=`<rect x="${x-W/2}" y="${yG-H/2}" width="${W}" height="${H}" rx="9" fill="var(--g-fill)" stroke="${on?'var(--arc)':'var(--g-stroke)'}" stroke-width="${active||on?2.6:1.3}" opacity="${active||on?1:.55}"/>
+          <text x="${x}" y="${yG+6}" text-anchor="middle" font-size="18" font-style="italic" fill="#4a1d1d">g<tspan font-size="11" dy="4">${t+1}</tspan></text>`;
+    }
+    s+=`<rect x="${xc-W/2-7}" y="${yF-H/2-9}" width="${W+14}" height="${yG-yF+H+18}" rx="13" fill="none" stroke="var(--accent)" stroke-width="2"/>
+        <text x="${xc}" y="${yF-H/2-16}" text-anchor="middle" font-family="Inter" font-size="12" font-weight="700" fill="var(--accent-ink)">x${sub(cur+1)} at block ${cur+1}</text>`;
+    // state queries the gate
+    s+=`<path d="M${xc} ${yG+H/2} L${xc} ${yGate-40}" stroke="var(--arc-2)" stroke-width="2.2" fill="none" marker-end="url(#ahg)"/>`;
+    // routed arcs, ordered so nearer experts get lower arcs
+    const left=sel.filter(o=>o.k<cur).sort((a,b)=>b.k-a.k), right=sel.filter(o=>o.k>cur).sort((a,b)=>a.k-b.k);
+    [[left,-1],[right,1]].forEach(([arr,side])=>arr.forEach((o,i)=>{
+      const xk=X0+DX*o.k, ex=xc+side*(14+i*9), y0=yG-H/2, d=Math.abs(xk-xc);
+      const cy=y0-28-Math.min(78,d*.09)-i*10;
+      s+=`<path d="M${xk} ${y0} C ${xk} ${cy}, ${ex} ${cy}, ${ex} ${y0-2}" stroke="var(--arc)" stroke-width="${1.4+3.4*o.w}" fill="none" marker-end="url(#ahr)" stroke-dasharray="7 5"><animate attributeName="stroke-dashoffset" from="24" to="0" dur=".8s" repeatCount="indefinite"/></path>`;
+      // label near the source end of the arc so labels of converging arcs never collide
+      const u=.22, by=(1-u)**3*y0+3*(1-u)*u*cy+u**3*y0, bx=(1-u)**3*xk+3*(1-u)**2*u*xk+3*(1-u)*u*u*ex+u**3*ex;
+      if(K>1) s+=`<text x="${bx-side*4}" y="${by-11}" text-anchor="${side>0?'end':'start'}" font-family="Inter" font-size="11" font-weight="700" fill="var(--arc)">${o.w.toFixed(2)}</text>`;
+    }));
+    // local control into the stream
+    s+=`<path d="M${xc} ${yG-H/2} L${xc} ${yF+H/2+2}" stroke="#534ab7" stroke-width="${1.2+3.5*alpha}" fill="none" marker-end="url(#ah)" opacity=".85"/>
+        <text x="${xc-10}" y="${yF+H/2+20}" text-anchor="end" font-size="14" font-style="italic" fill="var(--ink-2)">α g${sub(cur+1)}</text>`;
+    svg.innerHTML=s;
+    const t=cur+1, xt=`x_{${t}}`, own=c=>`\\htmlClass{hl-own}{${c}}`, rt=c=>`\\htmlClass{hl-route}{${c}}`;
+    const routed=sel.map(o=>`${K>1?o.w.toFixed(2)+"\\,":""}${rt(`g_{${o.k+1}}(${xt})`)}`).join(" + ");
+    const tex=`g_{\\text{moc}}(${xt}) = ${alpha.toFixed(2)}\\,${own(`g_{${t}}(${xt})`)} + ${(1-alpha).toFixed(2)}\\,${K>1?`\\big(${routed}\\big)`:routed}`;
+    const mt=document.getElementById("mixText");
+    if(window.katex) katex.render(tex,mt,{trust:true,throwOnError:false});
+    else mt.textContent=`Block ${t}: ${alpha.toFixed(2)}·g${t} + ${(1-alpha).toFixed(2)}·(${sel.map(o=>"g"+(o.k+1)).join(", ")})`;
+    document.getElementById("mixA").style.flex=alpha; document.getElementById("mixB").style.flex=Math.max(1-alpha,.01);
+  }
+  const step=()=>{cur=(cur+1)%L;sampleRoute();draw();};
+  const play=on=>{playing=on;clearInterval(timer);if(on)timer=setInterval(step,2200);const b=document.getElementById("demoPlay");b.textContent=on?"Pause":"Play";b.setAttribute("aria-pressed",on);};
+  document.getElementById("demoPlay").onclick=()=>play(!playing);
+  document.getElementById("demoStep").onclick=()=>{play(false);step();};
+  document.querySelectorAll("#demoK .tab").forEach(b=>b.onclick=()=>{K=+b.dataset.v;document.querySelectorAll("#demoK .tab").forEach(x=>x.setAttribute("aria-selected",x===b));sampleRoute();draw();});
+  const a=document.getElementById("alpha");
+  a.oninput=()=>{alpha=+a.value;document.getElementById("alphaVal").textContent=alpha.toFixed(2);draw();};
+  sampleRoute();draw();
+  addEventListener("load",draw); // KaTeX is deferred, so re-render once it has loaded
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) play(false); else play(true);
+})();
+
+/* ---------- results data (from the paper) ---------- */
+const CS_COLS=["BoolQ","PIQA","SIQA","HellaSwag","WinoGrande","ARC-e","ARC-c","OBQA","Avg"];
+const CS={
+ "LLaMA2-7B":[["LoRA*",.83,[69.8,79.9,79.5,83.6,82.6,79.8,64.7,81.0,77.6],6.1,48.0],["DoRA*",.85,[71.8,83.7,76.0,89.1,82.6,83.7,68.2,82.4,79.7],10.5,80.2],["MoLEx",.85,[69.7,81.9,78.4,91.3,81.5,81.5,65.8,80.8,78.9],9.8,77.4],["FacT_TK",.51,[69.8,80.6,77.8,90.8,81.8,79.7,65.4,78.6,78.1],6.0,48.5],["StructLoRA",.83,[70.9,82.0,78.6,91.6,82.1,81.6,66.6,80.6,79.3],8.5,71.6],["FlexLoRA",.83,[69.5,81.2,78.1,92.9,78.7,82.8,66.5,77.0,78.3],7.0,54.8],["Control*",.50,[72.3,82.5,79.2,89.1,83.1,83.0,68.5,79.0,79.6],4.2,42.6],["MoC",.51,[71.8,83.2,79.6,93.3,84.2,83.6,68.6,80.4,80.5],5.5,47.6]],
+ "LLaMA3-8B":[["LoRA*",.71,[70.8,85.2,79.9,91.7,84.3,84.2,71.2,79.0,80.8],7.5,59.1],["DoRA*",.71,[74.6,89.3,79.9,95.5,85.6,90.5,80.4,85.8,85.2],10.5,69.1],["MoLEx",.72,[70.1,86.2,80.4,93.2,84.1,84.8,71.3,82.2,81.5],11.0,94.9],["FacT_TK",.43,[70.7,86.0,79.5,94.2,84.2,86.5,73.3,81.8,82.0],7.7,57.6],["StructLoRA",.71,[70.9,86.6,79.5,93.9,84.0,87.0,73.9,82.6,82.3],9.8,75.4],["FlexLoRA",.71,[73.4,88.5,78.6,95.3,84.4,90.2,79.2,85.6,84.4],8.6,62.4],["Control*",.42,[74.1,87.8,80.7,95.5,86.0,90.8,80.0,87.8,85.3],4.4,54.0],["MoC",.43,[75.5,89.5,82.0,96.6,88.8,91.5,81.6,88.0,86.7],6.5,56.7]],
+ "Mistralv3-7B":[["LoRA",.78,[68.7,83.5,77.2,90.3,82.5,85.7,73.4,80.5,80.2],6.5,58.4],["DoRA",.79,[70.3,84.5,77.8,89.9,83.1,87.1,72.2,82.4,80.9],10.1,70.4],["MoLEx",.80,[71.4,85.4,78.2,90.3,83.5,84.1,75.0,82.7,81.3],10.5,82.3],["FacT_TK",.48,[70.5,86.4,80.3,94.1,84.2,83.9,71.0,84.4,81.9],6.3,56.0],["StructLoRA",.78,[70.0,83.2,77.4,89.9,81.7,87.2,74.8,81.4,80.7],9.2,70.1],["FlexLoRA",.78,[73.9,88.4,79.2,95.9,86.0,90.2,78.8,86.8,84.9],7.5,61.3],["Control",.46,[70.6,86.9,79.0,94.2,84.8,87.9,76.5,84.8,83.1],4.3,53.2],["MoC",.48,[74.2,88.9,81.0,95.6,87.9,88.9,79.5,87.8,85.5],5.5,55.6]],
+ "Qwen2.5-14B":[["LoRA",.63,[73.4,90.4,82.2,96.0,88.6,94.7,86.1,90.6,87.7],9.4,62.1],["DoRA",.64,[75.1,90.1,82.0,96.3,89.4,95.0,88.2,93.0,88.6],14.3,94.7],["MoLEx",.64,[73.5,90.5,81.9,95.5,88.2,94.4,85.8,92.2,87.8],20.3,124.8],["FacT_TK",.43,[74.7,90.1,82.3,96.2,89.6,94.7,88.1,92.4,88.5],8.0,61.5],["StructLoRA",.63,[74.8,89.5,81.0,95.8,89.3,94.7,87.4,92.4,88.1],13.5,77.3],["FlexLoRA",.63,[74.2,91.4,82.0,96.4,87.7,96.7,90.0,95.4,89.2],10.5,67.4],["Control",.43,[72.8,88.8,81.3,94.6,87.5,94.4,86.9,91.2,87.2],6.5,58.7],["MoC",.43,[75.5,91.8,82.4,96.8,91.0,96.6,90.2,96.4,90.1],8.0,61.3]],
+};
+
+const fmt=(v,d=1)=>v.toFixed(d);
+const nameCell=n=>n.endsWith("*")?`${n.slice(0,-1)}<span class="pub">*</span>`:n;
+const isMoC=n=>n.startsWith("MoC");
+function delta(v,base){const d=+(v-base).toFixed(1); if(d===0) return `<span class="d" style="color:var(--muted)">±0.0</span>`; return `<span class="d ${d>0?'u':'n'}">${d>0?'↑':'↓'}${Math.abs(d).toFixed(1)}</span>`;}
+
+/* rows: [{name, params?, acc:[], time?, mem?}] */
+function renderTable(el,cols,rows,{params=false,cost=false,timeUnit="h",deltas=true}={}){
+  const best=cols.map((_,j)=>Math.max(...rows.map(r=>r.acc[j])));
+  const base=rows[0].acc;
+  let h="<thead><tr><th>Method</th>"+(params?"<th>% Params</th>":"")+cols.map((c,j)=>`<th class="${j===cols.length-1?'sep':''}">${c}${j===cols.length-1?' ↑':''}</th>`).join("")+(cost?`<th class="sep">Time (${timeUnit}) ↓</th><th>GPU Mem. (GB) ↓</th>`:"")+"</tr></thead><tbody>";
+  rows.forEach((r,i)=>{
+    h+=`<tr class="${isMoC(r.name)?'moc':''}"><td>${nameCell(r.name)}</td>`+(params?`<td>${fmt(r.params,2)}</td>`:"")+
+      r.acc.map((v,j)=>`<td class="${v===best[j]?'best':''} ${j===cols.length-1?'sep':''}">${fmt(v)}${deltas&&i>0?delta(v,base[j]):""}</td>`).join("")+
+      (cost?`<td class="sep">${fmt(r.time)}</td><td>${fmt(r.mem)}</td>`:"")+"</tr>";
+  });
+  el.innerHTML=h+"</tbody>";
+}
+
+/* small-multiples: accuracy dot plot + time bars + memory bars */
+const tip=document.getElementById("tip");
+function showTip(e,html){tip.innerHTML=html;tip.style.opacity=1;const x=Math.min(e.clientX+14,innerWidth-200);tip.style.left=x+"px";tip.style.top=(e.clientY+14)+"px";}
+function hideTip(){tip.style.opacity=0;}
+function renderSM(rows,timeUnit){
+  const acc=rows.map(r=>r.acc[r.acc.length-1]);
+  const lo=Math.floor(Math.min(...acc)-1), hi=Math.ceil(Math.max(...acc)+.5);
+  const tMax=Math.max(...rows.map(r=>r.time))*1.18, mMax=Math.max(...rows.map(r=>r.mem))*1.18;
+  const pct=(v,a,b)=>((v-a)/(b-a)*100).toFixed(2)+"%";
+  document.getElementById("smTimeH").textContent=`Training time (${timeUnit}) ↓`;
+  const box=document.getElementById("smRows");
+  box.innerHTML=rows.map((r,i)=>`<div class="sm-row ${isMoC(r.name)?'moc':''}" data-i="${i}">
+      <div class="lab">${r.name.replace("*","")}</div>
+      <div class="track"><span class="stem" style="width:${pct(acc[i],lo,hi)}"></span><span class="dotm" style="left:${pct(acc[i],lo,hi)}"></span><span class="v" style="left:${pct(acc[i],lo,hi)};margin-left:6px">${fmt(acc[i])}</span></div>
+      <div class="track"><span class="bar" style="width:${pct(r.time,0,tMax)}"></span><span class="v" style="left:${pct(r.time,0,tMax)}">${fmt(r.time)}</span></div>
+      <div class="track"><span class="bar" style="width:${pct(r.mem,0,mMax)}"></span><span class="v" style="left:${pct(r.mem,0,mMax)}">${fmt(r.mem)}</span></div>
+    </div>`).join("");
+  document.getElementById("smAxis").innerHTML=`<div></div><div><span>${lo}</span><span>${hi}</span></div><div><span>0</span><span>${fmt(tMax,1)}</span></div><div><span>0</span><span>${fmt(mMax,0)}</span></div>`;
+  box.querySelectorAll(".sm-row").forEach(row=>{
+    const r=rows[+row.dataset.i];
+    row.onmousemove=e=>showTip(e,`<b>${r.name.replace("*","")}</b><br>Avg. acc. ${fmt(r.acc[r.acc.length-1])}%<br>Time ${fmt(r.time)} ${timeUnit} · Mem ${fmt(r.mem)} GB`);
+    row.onmouseleave=hideTip;
+  });
+}
+
+const BENCH={
+  cs:{models:Object.keys(CS),get:m=>CS[m].map(([name,params,acc,time,mem])=>({name,params,acc,time,mem})),cols:CS_COLS,opts:{params:true,cost:true,timeUnit:"h"},
+      note:"Commonsense reasoning with 8 datasets. Time is training hours, and memory is peak training GPU memory."},
+};
+let curBench="cs", curModel={cs:"LLaMA3-8B"};
+function setTabs(container,val,attr="data-v"){container.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.getAttribute(attr)===val));}
+function renderBench(){
+  const B=BENCH[curBench];
+  const mt=document.getElementById("modelTabs");
+  mt.innerHTML=B.models.map(m=>`<button class="tab" data-v="${m}" aria-selected="${m===curModel[curBench]}">${m}</button>`).join("");
+  mt.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{curModel[curBench]=b.dataset.v;renderBench();});
+  const rows=B.get(curModel[curBench]);
+  renderTable(document.getElementById("resTable"),B.cols,rows,B.opts);
+  document.getElementById("tnote").textContent=B.note;
+  const sm=document.getElementById("smCard");
+  if(B.opts.cost){sm.style.display="";document.getElementById("smTitle").textContent=`Accuracy vs. cost · ${curModel[curBench]}`;renderSM(rows,B.opts.timeUnit);} else sm.style.display="none";
+}
+renderBench();
+
+/* ablation tables */
+function simpleTable(id,head,rows,{higher=[],lower=[],mocRow=-1,ints=[]}={}){
+  const best=head.map((_,j)=>{const vals=rows.map(r=>r[j]).filter(v=>typeof v==="number");
+    return higher.includes(j)?Math.max(...vals):lower.includes(j)?Math.min(...vals):null;});
+  let h="<thead><tr>"+head.map(c=>`<th>${c}</th>`).join("")+"</tr></thead><tbody>";
+  rows.forEach((r,i)=>{h+=`<tr class="${i===mocRow?'moc':''}">`+r.map((v,j)=>`<td class="${best[j]!==null&&v===best[j]&&higher.includes(j)?'best':''}">${typeof v==="number"&&!ints.includes(j)?fmt(v):v}</td>`).join("")+"</tr>";});
+  document.getElementById(id).innerHTML=h+"</tbody>";
+}
+simpleTable("tRouting",["Method","Avg. Acc. ↑","GPU Mem. (GB) ↓"],[["Control",83.1,53.2],["Uniform Control",84.3,53.8],["Fixed Control",84.2,55.0],["MoC w/o load bal.",84.4,55.4],["MoC",85.5,55.6]],{higher:[1],mocRow:4});
+simpleTable("tVariants",["MoC variant","LLaMA3-8B ↑","Mistralv3-7B ↑"],[["ATTN",85.9,84.9],["FFN",86.2,85.1],["ATTN+FFN w/o sharing",86.4,84.9],["ATTN+FFN (shared)",86.7,85.5]],{higher:[1,2],mocRow:3});
+simpleTable("tPool",["# Groups","# Experts","Avg. Acc. ↑","Time (h)","GPU Mem. (GB)"],[[1,64,85.5,6.1,55.6],[2,32,85.1,6.1,55.6],[4,16,85.0,6.1,55.4],[8,8,84.8,6.0,55.4],[16,4,84.8,6.0,55.4]],{higher:[2],mocRow:0,ints:[0,1]});
+
+/* routing explorer */
+(function(){
+  let type="ffn",k="1";
+  const cap=()=>`Routing heatmaps on 8 commonsense datasets. Rows are routing layers and columns are the selected ${type==="ffn"?"FFN":"Attention"}-block control layer. LLaMA3-8B, Top-K = ${k}.`;
+  function upd(){
+    document.getElementById("rxGrid").src=`static/images/grid_${type}_llama3_top${k}_all_datasets.png`;
+    document.getElementById("rxBarA").src=`static/images/barchart_crosstype_attn_llama3_top${k}.png`;
+    document.getElementById("rxBarB").src=`static/images/barchart_crosstype_ffn_llama3_top${k}.png`;
+    document.getElementById("rxGridCap").textContent=cap();
+    setTabs(document.getElementById("rxType"),type);setTabs(document.getElementById("rxK"),k);
+  }
+  document.querySelectorAll("#rxType .tab").forEach(b=>b.onclick=()=>{type=b.dataset.v;upd();});
+  document.querySelectorAll("#rxK .tab").forEach(b=>b.onclick=()=>{k=b.dataset.v;upd();});
+  upd();
+})();
+
+/* figures open full-size on click */
+document.querySelectorAll(".figure img").forEach(img=>{
+  if(img.closest("a")) return;
+  const a=document.createElement("a");a.href=img.getAttribute("src");a.target="_blank";a.rel="noopener";a.title="Open full size";a.style.cursor="zoom-in";
+  img.parentNode.insertBefore(a,img);a.appendChild(img);
+  if(img.id) new MutationObserver(()=>a.href=img.getAttribute("src")).observe(img,{attributes:true,attributeFilter:["src"]});
+});
+
+/* copy bibtex */
+document.getElementById("copyBib").onclick=async e=>{
+  const t=document.getElementById("bibtex").textContent;
+  try{await navigator.clipboard.writeText(t);}catch(_){const r=document.createRange();r.selectNodeContents(document.getElementById("bibtex"));getSelection().removeAllRanges();getSelection().addRange(r);document.execCommand("copy");}
+  e.target.textContent="Copied ✓";setTimeout(()=>e.target.textContent="Copy",1600);
+};
+
+/* KaTeX */
+addEventListener("DOMContentLoaded",()=>{
+  const go=()=>window.renderMathInElement?renderMathInElement(document.body,{delimiters:[{left:"$$",right:"$$",display:true},{left:"$",right:"$",display:false}],ignoredTags:["script","noscript","style","textarea","pre","code"],throwOnError:false}):setTimeout(go,50);
+  go();
+});
+</script>
+</body>
+</html>

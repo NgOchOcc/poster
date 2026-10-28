@@ -1,5 +1,8 @@
 % Gemini theme
 % https://github.com/anishathalye/gemini
+%
+% NeurIPS 2026 poster: Mixture-of-Control (MoC).
+% Main-conference format: 140 cm x 90 cm, landscape.
 
 \documentclass[final]{beamer}
 
@@ -7,58 +10,196 @@
 % Packages
 % ====================
 
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
-\usepackage[size=custom,width=118.9,height=84.1,scale=1.0]{beamerposter}
+\usepackage[size=custom,width=140,height=90,scale=1.0]{beamerposter}
 \usetheme{gemini}
-\usecolortheme{gemini}
+\usecolortheme{neurips}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{amsmath}
+% Sans-serif math matched to the Lato body text, so formulas, tables and
+% prose share one typeface family.
+\usepackage{unicode-math}
+\setmathfont{LeteSansMath.otf}[Scale=MatchLowercase]
+% Upright math text (\mathbf, \text-like operators) also in Lato.
+\setmathrm{Lato}
+\usepackage{algpseudocode}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins}
 \usepackage{tikz}
-\usepackage{pgfplots}
-\pgfplotsset{compat=1.14}
+\usetikzlibrary{positioning}
+\usepackage{qrcode}
 \usepackage{anyfontsize}
 
 % ====================
-% Lengths
+% Paper metadata
 % ====================
 
-% If you have N columns, choose \sepwidth and \colwidth such that
-% (N+1)*\sepwidth + N*\colwidth = \paperwidth
+\newcommand{\paperid}{NeurIPS 2026 \#148178}
+\newcommand{\paperurl}{https://neurips.cc/virtual/2026/loc/sydney/poster/148178}
+\newcommand{\arxivurl}{https://arxiv.org/abs/2606.31397}
+\newcommand{\figdir}{MoC-project-page/static/images}
+
+\title{Mixture-of-Control: State-Aware Fine-Tuning for Transformer-based Models}
+\author[Nguyen, Luu, Pham, Tran]{\texorpdfstring{%
+  Duc-Anh Nguyen\inst{1,2}\textsuperscript{*,\textdagger}
+  \and Tien Ngoc Luu\inst{1}\textsuperscript{*}
+  \and Tung Pham\inst{1}
+  \and Toan Tran\inst{1}%
+}{Duc-Anh Nguyen, Tien Ngoc Luu, Tung Pham, Toan Tran}}
+\institute[Qualcomm AI Research; University of Virginia]{%
+  \inst{1} Qualcomm AI Research\textsuperscript{\textdaggerdbl}
+  \samelineand \inst{2} University of Virginia
+  \\[-0.1ex]\footnotesize
+  * Equal contribution \quad
+  \textdagger\ Work done during an internship at Qualcomm \quad
+  Corresponding author: Toan Tran \quad
+  \textdaggerdbl\ Qualcomm AI Research is an initiative of Qualcomm Technologies, Inc.}
+
+% ====================
+% Layout
+% ====================
+
+% Four separators and three columns fill the paper width:
+% 4*\sepwidth + 2*\colwidth + \widewidth = \paperwidth
 \newlength{\sepwidth}
 \newlength{\colwidth}
-\setlength{\sepwidth}{0.025\paperwidth}
-\setlength{\colwidth}{0.3\paperwidth}
-
+\newlength{\widewidth}
+\setlength{\sepwidth}{0.018\paperwidth}
+\setlength{\colwidth}{0.248\paperwidth}
+\setlength{\widewidth}{0.432\paperwidth}
 \newcommand{\separatorcolumn}{\begin{column}{\sepwidth}\end{column}}
 
 % ====================
-% Title
+% Colors and reusable visual elements
 % ====================
 
-\title{Some fancy title: followed by some more text}
+\definecolor{mocup}{HTML}{1B7F4B}
+\colorlet{mocrow}{neuripslavender}
+\colorlet{grouprow}{neuripsrule!55}
+\colorlet{owncolor}{neuripspurple}
+\definecolor{routecolor}{HTML}{185FA5}
+\definecolor{pagebg}{HTML}{F4F3F8}
 
-\author{Alyssa P. Hacker \inst{1} \and Ben Bitdiddle \inst{2} \and Lem E. Tweakit \inst{2}}
+\newcommand{\own}[1]{{\color{owncolor}#1}}
+\newcommand{\route}[1]{{\color{routecolor}#1}}
 
-\institute[shortinst]{\inst{1} Some Institute \samelineand \inst{2} Another Institute}
+\newcommand{\pill}[2]{%
+  \tikz[baseline=(label.base)]\node[
+    rounded corners=1.2ex,
+    fill=#1,
+    text=white,
+    inner xsep=1.1ex,
+    inner ysep=0.45ex,
+    font=\bfseries\small
+  ] (label) {#2};%
+}
+
+% Numbered "gap" card used in the motivation block.
+\newcommand{\gapcard}[3]{%
+  \begin{tikzpicture}
+    \node[fill=neuripsrose,rounded corners=0.6cm,inner sep=0.8cm,
+          text width=\linewidth-1.6cm,align=left] (c) {%
+      {\color{neuripscoral}\bfseries\Large #1}\quad{\bfseries #2}\\[0.4ex]
+      \small #3};
+  \end{tikzpicture}%
+}
+
+% Rounded callout for a single statement.
+\newcommand{\callout}[2][neuripslavender]{%
+  \begin{tikzpicture}
+    \node[fill=#1,rounded corners=0.6cm,inner sep=0.7cm,
+          text width=\linewidth-1.4cm,align=center] {\Centering #2};
+  \end{tikzpicture}%
+}
+
+% Boxed theorem statement for the theory block.
+\newtcolorbox{thmbox}[2]{%
+  enhanced,
+  colback=white, colframe=neuripspurple!75,
+  colbacktitle=neuripslavender, coltitle=neuripsnavy,
+  boxrule=1.6pt, arc=3mm,
+  left=7mm, right=7mm, top=3mm, bottom=3mm,
+  toptitle=1.5mm, bottomtitle=1.5mm,
+  fonttitle=\Raleway\bfseries,
+  title={{\color{neuripsmagenta}#1}\enspace#2},
+  before skip=2.2ex, after skip=1.2ex}
+
+% Algorithm box with a dark title bar.
+\newtcolorbox{algbox}[1]{%
+  enhanced,
+  colback=neuripslavender!40, colframe=neuripsnavy,
+  colbacktitle=neuripsnavy, coltitle=white,
+  boxrule=1.6pt, arc=3mm,
+  left=8mm, right=8mm, top=4mm, bottom=4mm,
+  toptitle=2mm, bottomtitle=2mm,
+  fonttitle=\Raleway\bfseries,
+  title={#1}}
+
+% Muted, right-aligned algorithm comments.
+\algrenewcommand{\algorithmiccomment}[1]{\hfill{\color{neuripsmuted}\small$\triangleright$~#1}}
+\algrenewcommand{\algorithmicrequire}{\textbf{Input:}}
+\algrenewcommand{\algorithmicensure}{\textbf{Output:}}
+
+% Tighter display math; size commands reset these skips, so hook into them.
+\newcommand{\tightdisplay}{%
+  \setlength{\abovedisplayskip}{0.5ex}\setlength{\belowdisplayskip}{0.5ex}%
+  \setlength{\abovedisplayshortskip}{0.3ex}\setlength{\belowdisplayshortskip}{0.3ex}}
+\makeatletter
+\g@addto@macro\normalsize{\tightdisplay}
+\g@addto@macro\small{\tightdisplay}
+\makeatother
+
+% Centered equation line without display-math skips.
+\newcommand{\eqline}[1]{\par{\centering$\displaystyle #1$\par}}
+
+% Small delta-vs-LoRA tag inside the main table.
+\newcommand{\up}[1]{\,{\color{mocup}\scriptsize$\uparrow$#1}}
 
 % ====================
-% Footer (optional)
+% Header and footer
 % ====================
 
-\footercontent{
-  \href{https://www.example.com}{https://www.example.com} \hfill
-  ABC Conference 2025, New York --- XYZ-1234 \hfill
-  \href{mailto:alyssa.p.hacker@example.com}{alyssa.p.hacker@example.com}}
-% (can be left out to remove footer)
+% ---- White headline: dark title text, official logos placed directly.
+\setbeamercolor{headline}{fg=neuripsnavy,bg=white}
+\setbeamercolor{headline title}{fg=neuripsnavy}
+\setbeamercolor{headline author}{fg=neuripsink}
+\setbeamercolor{headline institute}{fg=neuripsmuted}
+\setbeamercolor{headline rule}{bg=neuripspurple}
+\setbeamercolor{background canvas}{bg=pagebg}
 
-% ====================
-% Logo (optional)
-% ====================
+\logoleft{%
+  \tikz[baseline=(q.south)]{%
+    \node (q) {\includegraphics[height=2.2cm]{logos/qualcomm.pdf}};
+    \node[below=1.2cm of q] {\includegraphics[height=3.2cm]{logos/uva_wordmark.pdf}};}}
+\logoright{\includegraphics[height=6.4cm]{logos/neurips.pdf}}
 
-% use this to include logos on the left and/or right side of the header:
-% \logoright{\includegraphics[height=7cm]{logo1.pdf}}
-% \logoleft{\includegraphics[height=7cm]{logo2.pdf}}
+% ---- Card-style blocks: white rounded card with a colored title band.
+\tcbset{
+  poster card/.style 2 args={
+    enhanced, arc=5mm,
+    colback=#2, colframe=#1, boxrule=1.2pt,
+    colbacktitle=#1, coltitle=white,
+    fonttitle={\Raleway\large\bfseries},
+    toptitle=3.5mm, bottomtitle=3.5mm, lefttitle=9mm,
+    left=9mm, right=9mm, top=5mm, bottom=6mm,
+    before skip=0pt, after skip=2.4ex}}
+\setbeamertemplate{block begin}{%
+  \begin{tcolorbox}[poster card={neuripspurple}{white},title={\insertblocktitle}]%
+  \usebeamerfont{block body}\justifying\setlength{\parskip}{1ex}}
+\setbeamertemplate{block end}{\end{tcolorbox}}
+\setbeamertemplate{block alerted begin}{%
+  \begin{tcolorbox}[poster card={neuripsmagenta}{neuripsrose},title={\insertblocktitle}]%
+  \usebeamerfont{block body}\justifying\setlength{\parskip}{1ex}}
+\setbeamertemplate{block alerted end}{\end{tcolorbox}}
+
+\footercontent{%
+  \paperid \hfill
+  \href{\arxivurl}{arXiv:2606.31397} \hfill
+  \href{\paperurl}{neurips.cc/virtual/2026/poster/148178}%
+}
 
 % ====================
 % Body
@@ -67,279 +208,329 @@
 \begin{document}
 
 \begin{frame}[t]
+
+\vspace{1ex}
+
 \begin{columns}[t]
 \separatorcolumn
 
+% ====================
+% Column 1: motivation, problem, theory
+% ====================
+
 \begin{column}{\colwidth}
 
-  \begin{block}{A block title}
+  \begin{block}{1. Motivation: two gaps in efficient fine-tuning}
 
-    Some block contents, followed by a diagram, followed by a dummy paragraph.
+    \pill{neuripspurple}{BACKGROUND}\;
+    \textbf{State-based} fine-tuning updates lightweight controls on the
+    \emph{states}, not the weights: large memory savings with high parameter
+    efficiency.
+
+    \vspace{1.2ex}
+    \gapcard{1}{Control stays local to each block}{LoRA variants and
+      state-based methods such as Parallel Control adapt each block in
+      isolation $\Rightarrow$ weak coordination across depth.}
+
+    \vspace{0.9ex}
+    \gapcard{2}{Cross-layer communication is costly}{MoLEx mixes layers by
+      \textbf{re-running pretrained blocks}. On Qwen2.5-14B:
+      \textbf{124.8\,GB / 20.3\,h} vs.\ 62.1\,GB / 9.4\,h for LoRA.}
+
+  \end{block}
+
+  \begin{block}{2. Problem definition}
+
+    A transformer forward pass is a \textbf{discretized feedback system}:
+    frozen block $f_t$ = intrinsic dynamics, low-rank adapter $g_t$ = control.
+
+    \heading{Parallel Control (block-local)}
+    \eqline{x_{t+1}=x_t+f_t(W_tx_t)+g_t(x_t)}
+
+    \vspace{0.8ex}
+    \heading{Generalized state-based update}
+    \eqline{x_{t+1}=x_t+f_t(W_tx_t)+\alpha\,\own{g_t(x_t)}+(1-\alpha)\,\route{g_{h_t}(x_t)}}
+    \small $h_t=t$ recovers local tuning; $h_t\neq t$ communicates across
+    blocks through \textbf{low-rank controls}, not full-block reuse.
+
+    \vspace{1.2ex}
+    \callout{\itshape How can state-based fine-tuning capture deep cross-layer
+      interactions \textbf{without sacrificing memory efficiency}?}
+
+  \end{block}
+
+  \begin{block}{3. Theory: why routing control helps}
+
+    Under mild assumptions, MoC \textbf{keeps MoLEx's expressivity} and is
+    provably better behaved than block-local Parallel Control.
+
+    \begin{thmbox}{Theorem 4.1}{(Expressivity via state controls)}
+      If $\alpha>\tfrac12$ and $z_1=x_1$, there exist controls $g_k$ that
+      reproduce the MoLEx trajectory: exactly for linear $f_k$, and with
+      vanishing error for smooth nonlinear $f_k$ under small perturbations
+      $\|\Delta W'_t\|<\xi$:
+      \eqline{z_t=x_t\ \ \forall t\ \text{(linear)},\qquad
+        \mathbb{E}\|z_t-x_t\|^2\xrightarrow{\ \xi\to0\ }0}
+    \end{thmbox}
+
+    \begin{thmbox}{Proposition}{(Stability)}
+      With routed magnitude $\beta_K(x_t)=\sum_{k\in S_K}\pi_k\beta_k$ and
+      $\mathbb{E}[\beta_K\mid x_t]<\beta_t$ (encouraged by load balancing),
+      MoC's expected one-step growth is strictly smaller:
+      \eqline{1+L_f+\big[\alpha\beta_t+(1-\alpha)\,\mathbb{E}[\beta_K]\big]\gamma
+        \;<\;1+L_f+\beta_t\gamma}
+    \end{thmbox}
+
+    \begin{thmbox}{Corollary}{(Gradient flow)}
+      Each layerwise Jacobian bound tightens, $M_t\le M_t^{c}$, so the
+      backpropagated product is better conditioned:
+      \eqline{\prod_{t=1}^{L}\|J_t\|\;\le\;\prod_{t=1}^{L}M_t\;\le\;\prod_{t=1}^{L}M_t^{c}}
+    \end{thmbox}
+
+    \begin{thmbox}{Proposition}{(Representation)}
+      Mixing routed experts brings the control closer to the task-optimal
+      signal $\Delta W^{*}x$ than block-local control alone:
+      \eqline{\bar\epsilon^{2}\;\le\;\alpha\,\bar\epsilon_c^{2}+(1-\alpha)\,\bar\epsilon_K^{2}\;<\;\bar\epsilon_c^{2}}
+    \end{thmbox}
+
+  \end{block}
+
+\end{column}
+
+\separatorcolumn
+
+% ====================
+% Column 2: method, algorithm, conclusion
+% ====================
+
+\begin{column}{\colwidth}
+
+  \begin{block}{4. Method: control states as experts}
 
     \begin{figure}
       \centering
-      \begin{tikzpicture}[scale=6]
-        \draw[step=0.25cm,color=gray] (-1,-1) grid (1,1);
-        \draw (1,0) -- (0.2,0.2) -- (0,1) -- (-0.2,0.2) -- (-1,0)
-          -- (-0.2,-0.2) -- (0,-1) -- (0.2,-0.2) -- cycle;
-      \end{tikzpicture}
-      \caption{A figure caption.}
+      % Trim the PNG's uneven side margins (ink spans x=59..2283 of 2400 px)
+      % so the drawing is optically centered in the column.
+      \includegraphics[width=\linewidth,trim=40 0 100 0,clip]{\figdir/MoC_architecture.png}
+      \caption{At block $i$, frozen $f_i$ and local control $g_i$ run in
+        parallel. A \textbf{shared gate} picks Top-$K$ controls from
+        \emph{all} layers and fuses them with the local one ($K{=}1$ shown).}
     \end{figure}
 
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Morbi ultricies
-    eget libero ac ullamcorper. Integer et euismod ante. Aenean vestibulum
-    lobortis augue, ut lobortis turpis rhoncus sed. Proin feugiat nibh a
-    lacinia dignissim. Proin scelerisque, risus eget tempor fermentum, ex
-    turpis condimentum urna, quis malesuada sapien arcu eu purus.
+    \vspace{1ex}
+    \heading{MoC update}
+    \eqline{x_{t+1}=x_t+f_t(W_tx_t)+\alpha\,\own{g_t(x_t)} +(1-\alpha)\sum_{k=1}^{L}\pi_k(x_t)\,\route{g_k(x_t)}}
+    \vspace{0.8ex}
+    \heading{Sparse routing with a shared gate}
+    \eqline{\pi_k(x_t)=\operatorname{softmax}\!\big(\operatorname{TopK}(\mathbf{W}_{\text{gate}}\,x_t)\big)_k}
+
+    \vspace{1.2ex}
+    \begin{columns}[t,totalwidth=\linewidth]
+      \begin{column}{0.49\linewidth}
+        \begin{itemize}
+          \item \textbf{Input:} hidden state $x_t$ at block $t$.
+          \item \textbf{Expert pool:} the $L$ controls $\{g_k\}$ of all blocks.
+          \item \textbf{Gate:} one $\mathbf{W}_{\text{gate}}$ shared across layers.
+        \end{itemize}
+      \end{column}
+      \begin{column}{0.49\linewidth}
+        \begin{itemize}
+          \item \textbf{Objective:} $\mathcal{L}=\mathcal{L}_{\text{task}}+\lambda\,\mathcal{L}_{\text{balance}}$.
+          \item \textbf{Training:} batch-level routing (mean / mode of token scores).
+          \item \textbf{Inference:} each sample routed from its own prefix.
+        \end{itemize}
+      \end{column}
+    \end{columns}
 
   \end{block}
 
-  \begin{block}{A block containing a list}
+  \begin{block}{5. Algorithm: MoC forward pass}
 
-    Curabitur condimentum sem id semper vulputate. Nam lobortis ultrices
-    iaculis. Maecenas bibendum, sem vel vehicula tempus, nisi tortor eleifend
-    tellus, at molestie mi libero ut turpis. Duis finibus finibus sapien, ut
-    mollis odio malesuada a. Aenean ut ex augue. Quisque vulputate scelerisque
-    eros quis bibendum. Nunc accumsan nisl a tincidunt dapibus. Nulla ut
-    vulputate elit, quis posuere tellus. Aliquam euismod nulla ipsum, eu
-    blandit metus fermentum sed. Proin ultrices sodales nulla eu molestie.
-    Nullam mi odio, blandit nec dui lacinia, accumsan facilisis nunc. Maecenas
-    vel est et magna dapibus cursus id in ante.
-
-    \begin{itemize}
-      \item \textbf{Mauris tempor} risus nulla, sed ornare
-      \item \textbf{Libero tincidunt} a duis congue vitae
-      \item \textbf{Dui ac pretium} morbi justo neque, ullamcorper
-    \end{itemize}
-
-    Cras imperdiet vel elit dignissim cursus. Nulla vehicula, lacus sed lacinia
-    hendrerit, tortor libero euismod orci, sodales cursus felis arcu sit amet
-    metus. Suspendisse sit amet tincidunt nisi. Maecenas id libero rutrum,
-    sodales enim id, varius sem. Maecenas ac felis vel dolor feugiat pharetra.
-    Nullam suscipit libero efficitur, commodo lacus in, blandit mi. Nam at
-    sagittis nisl. Mauris eu enim nibh. In sollicitudin sit amet tortor
-    imperdiet convallis.
-
-    Mauris eget risus a purus feugiat consectetur. Aliquam suscipit nunc
-    nulla, sed feugiat massa volutpat ac. Nullam quis bibendum orci. Cras
-    blandit odio velit, et tempus neque malesuada ut. Fusce pharetra mauris
-    sed magna ultrices, eget aliquet dui pellentesque. Nullam porta eleifend
-    leo eu feugiat. Sed quis libero in magna interdum sagittis ut sed mi.
+    \begin{algbox}{Algorithm 1\enspace MoC forward pass at block $t$}
+      \setlength{\baselineskip}{1.45\baselineskip}
+      \begin{algorithmic}[1]
+        \Require state $x_t$; frozen block $f_t$; controls $\{g_k\}_{k=1}^{L}$; gate $\mathbf{W}_{\text{gate}}$; $K$, $\alpha$
+        \Ensure next state $x_{t+1}$
+        \State $p_{\text{own}}\gets \own{g_t(x_t)}$ \Comment{layer-dedicated expert}
+        \State $\pi\gets\operatorname{softmax}(\mathbf{W}_{\text{gate}}\,x_t)$ \Comment{dense routing}
+        \State $S_K\gets\operatorname{TopK}(\pi,K)$ \Comment{expert selection}
+        \State $\pi_i\gets\pi_i/\sum_{j\in S_K}\pi_j,\ \ i\in S_K$ \Comment{re-normalize}
+        \State $p_{\text{route}}\gets\sum_{i\in S_K}\pi_i\,\route{g_i(x_t)}$ \Comment{sparse aggregation}
+        \State $g_{\text{moc}}\gets\alpha\,p_{\text{own}}+(1-\alpha)\,p_{\text{route}}$ \Comment{control signal}
+        \State \Return $x_{t+1}\gets x_t+f_t(x_t)+g_{\text{moc}}$ \Comment{$f_t$ runs once}
+      \end{algorithmic}
+    \end{algbox}
 
   \end{block}
 
-  \begin{alertblock}{A highlighted block}
-
-    This block catches your eye, so \textbf{important stuff} should probably go
-    here.
-
-    Curabitur eu libero vehicula, cursus est fringilla, luctus est. Morbi
-    consectetur mauris quam, at finibus elit auctor ac. Aliquam erat volutpat.
-    Aenean at nisl ut ex ullamcorper eleifend et eu augue. Aenean quis velit
-    tristique odio convallis ultrices a ac odio.
-
-    \begin{itemize}
-      \item \textbf{Fusce dapibus tellus} vel tellus semper finibus. In
-        consequat, nibh sed mattis luctus, augue diam fermentum lectus.
-      \item \textbf{In euismod erat metus} non ex. Vestibulum luctus augue in
-        mi condimentum, at sollicitudin lorem viverra.
-      \item \textbf{Suspendisse vulputate} mauris vel placerat consectetur.
-        Mauris semper, purus ac hendrerit molestie, elit mi dignissim odio, in
-        suscipit felis sapien vel ex.
-    \end{itemize}
-
-    Aenean tincidunt risus eros, at gravida lorem sagittis vel. Vestibulum ante
-    ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae.
-
+  \begin{alertblock}{Key findings \& conclusion}
+    \begin{columns}[T,totalwidth=\linewidth]
+      \begin{column}{0.74\linewidth}
+        \begin{itemize}
+          \item \textbf{Novelty:} block-wise control states become a
+            cross-layer \textbf{sparse MoE pool} with one shared gate.
+          \item \textbf{Accuracy:} best average on all 4 LLMs, GLUE, and
+            VTAB-1K; up to \textbf{+5.9} over LoRA.
+          \item \textbf{Efficiency:} pretrained blocks run once
+            $\Rightarrow$ \textbf{$\sim$half the memory} of MoLEx, throughput
+            near Control.
+          \item \textbf{Theory:} keeps MoLEx expressivity with better
+            stability, gradients, and representation error.
+          \item \textbf{Limitation:} like other state-based methods, MoC
+            is still slower at inference than fully merged weight adapters.
+        \end{itemize}
+      \end{column}
+      \begin{column}{0.24\linewidth}
+        \centering
+        \qrcode[height=6cm]{\arxivurl}\\[0.4ex]
+        \footnotesize\bfseries arXiv:2606.31397
+      \end{column}
+    \end{columns}
   \end{alertblock}
 
 \end{column}
 
 \separatorcolumn
 
-\begin{column}{\colwidth}
+% ====================
+% Column 3: results, ablations, throughput
+% ====================
 
-  \begin{block}{A block containing an enumerated list}
+\begin{column}{\widewidth}
 
-    Vivamus congue volutpat elit non semper. Praesent molestie nec erat ac
-    interdum. In quis suscipit erat. \textbf{Phasellus mauris felis, molestie
-    ac pharetra quis}, tempus nec ante. Donec finibus ante vel purus mollis
-    fermentum. Sed felis mi, pharetra eget nibh a, feugiat eleifend dolor. Nam
-    mollis condimentum purus quis sodales. Nullam eu felis eu nulla eleifend
-    bibendum nec eu lorem. Vivamus felis velit, volutpat ut facilisis ac,
-    commodo in metus.
-
-    \begin{enumerate}
-      \item \textbf{Morbi mauris purus}, egestas at vehicula et, convallis
-        accumsan orci. Orci varius natoque penatibus et magnis dis parturient
-        montes, nascetur ridiculus mus.
-      \item \textbf{Cras vehicula blandit urna ut maximus}. Aliquam blandit nec
-        massa ac sollicitudin. Curabitur cursus, metus nec imperdiet bibendum,
-        velit lectus faucibus dolor, quis gravida metus mauris gravida turpis.
-      \item \textbf{Vestibulum et massa diam}. Phasellus fermentum augue non
-        nulla accumsan, non rhoncus lectus condimentum.
-    \end{enumerate}
-
-  \end{block}
-
-  \begin{block}{Fusce aliquam magna velit}
-
-    Et rutrum ex euismod vel. Pellentesque ultricies, velit in fermentum
-    vestibulum, lectus nisi pretium nibh, sit amet aliquam lectus augue vel
-    velit. Suspendisse rhoncus massa porttitor augue feugiat molestie. Sed
-    molestie ut orci nec malesuada. Sed ultricies feugiat est fringilla
-    posuere.
-
-    \begin{figure}
-      \centering
-      \begin{tikzpicture}
-        \begin{axis}[
-            scale only axis,
-            no markers,
-            domain=0:2*pi,
-            samples=100,
-            axis lines=center,
-            axis line style={-},
-            ticks=none]
-          \addplot[red] {sin(deg(x))};
-          \addplot[blue] {cos(deg(x))};
-        \end{axis}
-      \end{tikzpicture}
-      \caption{Another figure caption.}
-    \end{figure}
-
-    In in mi consequat, tristique felis at, dapibus lacus. Fusce sed eleifend
-    sem. Phasellus viverra eros enim. Ut quis pulvinar turpis. In eu faucibus
-    risus. Morbi convallis elit metus, nec vestibulum justo sollicitudin sit
-    amet. Duis et magna accumsan, rutrum erat ut, pulvinar eros. Nunc ac tellus
-    suscipit, sagittis massa nec, ultricies mi. Praesent eget placerat sem. Sed
-    interdum, ligula ut condimentum facilisis, risus risus congue ex, at ornare
-    eros ipsum vel sapien. Suspendisse tincidunt elit ut magna consequat, at
-    dapibus est fringilla. Aliquam vitae dolor urna. Curabitur pellentesque
-    pretium convallis. Sed et ex vel nisi condimentum finibus. Cras blandit
-    nibh molestie venenatis feugiat. Proin nec justo pulvinar, euismod elit
-    viverra, condimentum sem.
-
-  \end{block}
-
-  \begin{block}{Nam cursus consequat egestas}
-
-    Nulla eget sem quam. Ut aliquam volutpat nisi vestibulum convallis. Nunc a
-    lectus et eros facilisis hendrerit eu non urna. Interdum et malesuada fames
-    ac ante \textit{ipsum primis} in faucibus. Etiam sit amet velit eget sem
-    euismod tristique. Praesent enim erat, porta vel mattis sed, pharetra sed
-    ipsum. Morbi commodo condimentum massa, \textit{tempus venenatis} massa
-    hendrerit quis. Maecenas sed porta est. Praesent mollis interdum lectus,
-    sit amet sollicitudin risus tincidunt non.
-
-    Etiam sit amet tempus lorem, aliquet condimentum velit. Donec et nibh
-    consequat, sagittis ex eget, dictum orci. Etiam quis semper ante. Ut eu
-    mauris purus. Proin nec consectetur ligula. Mauris pretium molestie
-    ullamcorper. Integer nisi neque, aliquet et odio non, sagittis porta justo.
-
-    \begin{itemize}
-      \item \textbf{Sed consequat} id ante vel efficitur. Praesent congue massa
-        sed est scelerisque, elementum mollis augue iaculis.
-        \begin{itemize}
-          \item In sed est finibus, vulputate
-            nunc gravida, pulvinar lorem. In maximus nunc dolor, sed auctor eros
-            porttitor quis.
-          \item Fusce ornare dignissim nisi. Nam sit amet risus vel lacus
-            tempor tincidunt eu a arcu.
-          \item Donec rhoncus vestibulum erat, quis aliquam leo
-            gravida egestas.
-        \end{itemize}
-      \item \textbf{Sed luctus, elit sit amet} dictum maximus, diam dolor
-        faucibus purus, sed lobortis justo erat id turpis.
-      \item \textbf{Pellentesque facilisis dolor in leo} bibendum congue.
-        Maecenas congue finibus justo, vitae eleifend urna facilisis at.
-    \end{itemize}
-
-  \end{block}
-
-\end{column}
-
-\separatorcolumn
-
-\begin{column}{\colwidth}
-
-  \begin{exampleblock}{A highlighted block containing some math}
-
-    A different kind of highlighted block.
-
-    $$
-    \int_{-\infty}^{\infty} e^{-x^2}\,dx = \sqrt{\pi}
-    $$
-
-    Interdum et malesuada fames $\{1, 4, 9, \ldots\}$ ac ante ipsum primis in
-    faucibus. Cras eleifend dolor eu nulla suscipit suscipit. Sed lobortis non
-    felis id vulputate.
-
-    \heading{A heading inside a block}
-
-    Praesent consectetur mi $x^2 + y^2$ metus, nec vestibulum justo viverra
-    nec. Proin eget nulla pretium, egestas magna aliquam, mollis neque. Vivamus
-    dictum $\mathbf{u}^\intercal\mathbf{v}$ sagittis odio, vel porta erat
-    congue sed. Maecenas ut dolor quis arcu auctor porttitor.
-
-    \heading{Another heading inside a block}
-
-    Sed augue erat, scelerisque a purus ultricies, placerat porttitor neque.
-    Donec $P(y \mid x)$ fermentum consectetur $\nabla_x P(y \mid x)$ sapien
-    sagittis egestas. Duis eget leo euismod nunc viverra imperdiet nec id
-    justo.
-
-  \end{exampleblock}
-
-  \begin{block}{Nullam vel erat at velit convallis laoreet}
-
-    Class aptent taciti sociosqu ad litora torquent per conubia nostra, per
-    inceptos himenaeos. Phasellus libero enim, gravida sed erat sit amet,
-    scelerisque congue diam. Fusce dapibus dui ut augue pulvinar iaculis.
+  \begin{block}{6. Main results: commonsense reasoning on four LLM backbones}
 
     \begin{table}
       \centering
-      \begin{tabular}{l r r c}
-        \toprule
-        \textbf{First column} & \textbf{Second column} & \textbf{Third column} & \textbf{Fourth} \\
-        \midrule
-        Foo & 13.37 & 384,394 & $\alpha$ \\
-        Bar & 2.17 & 1,392 & $\beta$ \\
-        Baz & 3.14 & 83,742 & $\delta$ \\
-        Qux & 7.59 & 974 & $\gamma$ \\
-        \bottomrule
-      \end{tabular}
-      \caption{A table caption.}
+      \footnotesize
+      \setlength{\tabcolsep}{0.32em}
+      \renewcommand{\arraystretch}{1.15}
+      \begin{columns}[t,totalwidth=\linewidth]
+        \begin{column}{0.495\linewidth}
+          \centering
+          \begin{tabular}{@{}l c cccccccc >{\columncolor{neuripsrule!30}}c cc@{}}
+            \toprule
+            \textbf{Method} & \textbf{\%Par.} & \textbf{BoolQ} & \textbf{PIQA} & \textbf{SIQA} & \textbf{HellaS.} & \textbf{WinoG.} & \textbf{ARC-e} & \textbf{ARC-c} & \textbf{OBQA} & \textbf{Avg$\uparrow$} & \textbf{h$\downarrow$} & \textbf{GB$\downarrow$} \\
+            \midrule
+            \rowcolor{grouprow}\multicolumn{13}{l}{\textbf{LLaMA2-7B}} \\
+            LoRA$^{*}$ & 0.83 & 69.8 & 79.9 & 79.5 & 83.6 & 82.6 & 79.8 & 64.7 & 81.0 & 77.6 & 6.1 & 48.0 \\
+            DoRA$^{*}$ & 0.85 & 71.8 & \textbf{83.7} & 76.0 & 89.1 & 82.6 & \textbf{83.7} & 68.2 & \textbf{82.4} & 79.7 & 10.5 & 80.2 \\
+            MoLEx & 0.85 & 69.7 & 81.9 & 78.4 & 91.3 & 81.5 & 81.5 & 65.8 & 80.8 & 78.9 & 9.8 & 77.4 \\
+            FacT\_TK & 0.51 & 69.8 & 80.6 & 77.8 & 90.8 & 81.8 & 79.7 & 65.4 & 78.6 & 78.1 & 6.0 & 48.5 \\
+            StructLoRA & 0.83 & 70.9 & 82.0 & 78.6 & 91.6 & 82.1 & 81.6 & 66.6 & 80.6 & 79.3 & 8.5 & 71.6 \\
+            FlexLoRA & 0.83 & 69.5 & 81.2 & 78.1 & 92.9 & 78.7 & 82.8 & 66.5 & 77.0 & 78.3 & 7.0 & 54.8 \\
+            Control$^{*}$ & 0.50 & \textbf{72.3} & 82.5 & 79.2 & 89.1 & 83.1 & 83.0 & 68.5 & 79.0 & 79.6 & 4.2 & 42.6 \\
+            \rowcolor{mocrow}\textbf{MoC} & 0.51 & 71.8 & 83.2 & \textbf{79.6} & \textbf{93.3} & \textbf{84.2} & 83.6 & \textbf{68.6} & 80.4 & \textbf{80.5}\up{2.9} & 5.5 & 47.6 \\
+            \midrule
+            \rowcolor{grouprow}\multicolumn{13}{l}{\textbf{LLaMA3-8B}} \\
+            LoRA$^{*}$ & 0.71 & 70.8 & 85.2 & 79.9 & 91.7 & 84.3 & 84.2 & 71.2 & 79.0 & 80.8 & 7.5 & 59.1 \\
+            DoRA$^{*}$ & 0.71 & 74.6 & 89.3 & 79.9 & 95.5 & 85.6 & 90.5 & 80.4 & 85.8 & 85.2 & 10.5 & 69.1 \\
+            MoLEx & 0.72 & 70.1 & 86.2 & 80.4 & 93.2 & 84.1 & 84.8 & 71.3 & 82.2 & 81.5 & 11.0 & 94.9 \\
+            FacT\_TK & 0.43 & 70.7 & 86.0 & 79.5 & 94.2 & 84.2 & 86.5 & 73.3 & 81.8 & 82.0 & 7.7 & 57.6 \\
+            StructLoRA & 0.71 & 70.9 & 86.6 & 79.5 & 93.9 & 84.0 & 87.0 & 73.9 & 82.6 & 82.3 & 9.8 & 75.4 \\
+            FlexLoRA & 0.71 & 73.4 & 88.5 & 78.6 & 95.3 & 84.4 & 90.2 & 79.2 & 85.6 & 84.4 & 8.6 & 62.4 \\
+            Control$^{*}$ & 0.42 & 74.1 & 87.8 & 80.7 & 95.5 & 86.0 & 90.8 & 80.0 & 87.8 & 85.3 & 4.4 & 54.0 \\
+            \rowcolor{mocrow}\textbf{MoC} & 0.43 & \textbf{75.5} & \textbf{89.5} & \textbf{82.0} & \textbf{96.6} & \textbf{88.8} & \textbf{91.5} & \textbf{81.6} & \textbf{88.0} & \textbf{86.7}\up{5.9} & 6.5 & 56.7 \\
+            \bottomrule
+          \end{tabular}
+        \end{column}
+        \begin{column}{0.495\linewidth}
+          \centering
+          \begin{tabular}{@{}l c cccccccc >{\columncolor{neuripsrule!30}}c cc@{}}
+            \toprule
+            \textbf{Method} & \textbf{\%Par.} & \textbf{BoolQ} & \textbf{PIQA} & \textbf{SIQA} & \textbf{HellaS.} & \textbf{WinoG.} & \textbf{ARC-e} & \textbf{ARC-c} & \textbf{OBQA} & \textbf{Avg$\uparrow$} & \textbf{h$\downarrow$} & \textbf{GB$\downarrow$} \\
+            \midrule
+            \rowcolor{grouprow}\multicolumn{13}{l}{\textbf{Mistralv3-7B}} \\
+            LoRA & 0.78 & 68.7 & 83.5 & 77.2 & 90.3 & 82.5 & 85.7 & 73.4 & 80.5 & 80.2 & 6.5 & 58.4 \\
+            DoRA & 0.79 & 70.3 & 84.5 & 77.8 & 89.9 & 83.1 & 87.1 & 72.2 & 82.4 & 80.9 & 10.1 & 70.4 \\
+            MoLEx & 0.80 & 71.4 & 85.4 & 78.2 & 90.3 & 83.5 & 84.1 & 75.0 & 82.7 & 81.3 & 10.5 & 82.3 \\
+            FacT\_TK & 0.48 & 70.5 & 86.4 & 80.3 & 94.1 & 84.2 & 83.9 & 71.0 & 84.4 & 81.9 & 6.3 & 56.0 \\
+            StructLoRA & 0.78 & 70.0 & 83.2 & 77.4 & 89.9 & 81.7 & 87.2 & 74.8 & 81.4 & 80.7 & 9.2 & 70.1 \\
+            FlexLoRA & 0.78 & 73.9 & 88.4 & 79.2 & \textbf{95.9} & 86.0 & \textbf{90.2} & 78.8 & 86.8 & 84.9 & 7.5 & 61.3 \\
+            Control & 0.46 & 70.6 & 86.9 & 79.0 & 94.2 & 84.8 & 87.9 & 76.5 & 84.8 & 83.1 & 4.3 & 53.2 \\
+            \rowcolor{mocrow}\textbf{MoC} & 0.48 & \textbf{74.2} & \textbf{88.9} & \textbf{81.0} & 95.6 & \textbf{87.9} & 88.9 & \textbf{79.5} & \textbf{87.8} & \textbf{85.5}\up{5.3} & 5.5 & 55.6 \\
+            \midrule
+            \rowcolor{grouprow}\multicolumn{13}{l}{\textbf{Qwen2.5-14B}} \\
+            LoRA & 0.63 & 73.4 & 90.4 & 82.2 & 96.0 & 88.6 & 94.7 & 86.1 & 90.6 & 87.7 & 9.4 & 62.1 \\
+            DoRA & 0.64 & 75.1 & 90.1 & 82.0 & 96.3 & 89.4 & 95.0 & 88.2 & 93.0 & 88.6 & 14.3 & 94.7 \\
+            MoLEx & 0.64 & 73.5 & 90.5 & 81.9 & 95.5 & 88.2 & 94.4 & 85.8 & 92.2 & 87.8 & 20.3 & 124.8 \\
+            FacT\_TK & 0.43 & 74.7 & 90.1 & 82.3 & 96.2 & 89.6 & 94.7 & 88.1 & 92.4 & 88.5 & 8.0 & 61.5 \\
+            StructLoRA & 0.63 & 74.8 & 89.5 & 81.0 & 95.8 & 89.3 & 94.7 & 87.4 & 92.4 & 88.1 & 13.5 & 77.3 \\
+            FlexLoRA & 0.63 & 74.2 & 91.4 & 82.0 & 96.4 & 87.7 & \textbf{96.7} & 90.0 & 95.4 & 89.2 & 10.5 & 67.4 \\
+            Control & 0.43 & 72.8 & 88.8 & 81.3 & 94.6 & 87.5 & 94.4 & 86.9 & 91.2 & 87.2 & 6.5 & 58.7 \\
+            \rowcolor{mocrow}\textbf{MoC} & 0.43 & \textbf{75.5} & \textbf{91.8} & \textbf{82.4} & \textbf{96.8} & \textbf{91.0} & 96.6 & \textbf{90.2} & \textbf{96.4} & \textbf{90.1}\up{2.4} & 8.0 & 61.3 \\
+            \bottomrule
+          \end{tabular}
+        \end{column}
+      \end{columns}
+      \caption{Accuracy (\%) on 8 commonsense datasets. \textbf{Bold}: best per
+        column within each backbone; {\color{mocup}$\uparrow$}: average gain over
+        LoRA; $^{*}$: previously published numbers. \%Par.: trainable parameters;
+        h: training hours; GB: peak training GPU memory. MoC also achieves the
+        best average on GLUE (RoBERTa, DeBERTa) and VTAB-1K (ViT-Tiny, ViT-Base).}
     \end{table}
-
-    Donec quis posuere ligula. Nunc feugiat elit a mi malesuada consequat. Sed
-    imperdiet augue ac nibh aliquet tristique. Aenean eu tortor vulputate,
-    eleifend lorem in, dictum urna. Proin auctor ante in augue tincidunt
-    tempor. Proin pellentesque vulputate odio, ac gravida nulla posuere
-    efficitur. Aenean at velit vel dolor blandit molestie. Mauris laoreet
-    commodo quam, non luctus nibh ullamcorper in. Class aptent taciti sociosqu
-    ad litora torquent per conubia nostra, per inceptos himenaeos.
-
-    \begin{enumerate}
-      \item \textbf{Praesent vel enim} eget urna auctor accumsan. Ut volutpat, erat sed vulputate porta, metus dolor consectetur eros, eget vestibulum purus nulla hendrerit ex.
-      \item \textbf{Lorem ipsum dolor sit amet}, consectetur adipiscing elit. Proin lobortis euismod eros at rhoncus.
-      \item \textbf{Sed eget odio varius}, posuere tellus malesuada, commodo tellus. Sed sollicitudin mauris nibh, quis mattis magna fermentum et.
-      \item \textbf{Suspendisse ut tellus} ullamcorper, faucibus mauris vitae, blandit est. Aenean gravida sodales pretium. Nullam sed dolor in arcu maximus blandit vel non eros.
-      \item \textbf{Fusce quis elit} vel lectus porta tempus.
-    \end{enumerate}
-
-    Nulla varius finibus volutpat. Mauris molestie lorem tincidunt, iaculis
-    libero at, gravida ante. Phasellus at felis eu neque suscipit suscipit.
-    Integer ullamcorper, dui nec pretium ornare, urna dolor consequat libero,
-    in feugiat elit lorem euismod lacus. Pellentesque sit amet dolor mollis,
-    auctor urna non, tempus sem.
 
   \end{block}
 
-  \begin{block}{References}
+  \begin{block}{7. Ablations: what makes MoC work}
 
-    \nocite{*}
-    \footnotesize{\bibliographystyle{plain}\bibliography{poster}}
+    \begin{figure}
+      \centering
+      \includegraphics[width=0.88\linewidth]{\figdir/ablation_hyperparams.png}
+      \caption{(a) Cost grows moderately with \#experts (Mistralv3-7B).
+        (b) Best: local + 1 routed expert. (c) Robust to $\alpha$, peak at
+        0.95. (d) Load balancing peaks at $\lambda{=}0.01$.}
+    \end{figure}
+
+    \begin{columns}[t,totalwidth=\linewidth]
+      \begin{column}{0.53\linewidth}
+        \centering\small\renewcommand{\arraystretch}{1.2}
+        \begin{tabular}{l c c}
+          \toprule
+          \textbf{Communication} & \textbf{Acc.} & \textbf{GB} \\
+          \midrule
+          Control (local) & 83.1 & 53.2 \\
+          Uniform Control & 84.3 & 53.8 \\
+          Fixed Control & 84.2 & 55.0 \\
+          MoC w/o load bal. & 84.4 & 55.4 \\
+          \rowcolor{mocrow}\textbf{MoC} & \textbf{85.5} & 55.6 \\
+          \bottomrule
+        \end{tabular}\\[0.3ex]
+        {\color{neuripsmuted}Mistralv3-7B}
+      \end{column}
+      \begin{column}{0.45\linewidth}
+        \centering\small\renewcommand{\arraystretch}{1.2}
+        \begin{tabular}{l c c}
+          \toprule
+          \textbf{Variant} & \textbf{L3} & \textbf{M3} \\
+          \midrule
+          ATTN & 85.9 & 84.9 \\
+          FFN & 86.2 & 85.1 \\
+          A+F w/o share & 86.4 & 84.9 \\
+          \rowcolor{mocrow}\textbf{A+F shared} & \textbf{86.7} & \textbf{85.5} \\
+          \bottomrule
+        \end{tabular}\\[0.3ex]
+        {\color{neuripsmuted}L3: LLaMA3-8B, M3: Mistralv3-7B}
+      \end{column}
+    \end{columns}
+
+
+    \vspace{0.6ex}
+    {\small Every communication variant beats local Control; adaptive
+    routing + load balancing adds \textbf{+1.1}, and sharing one pool across
+    ATTN and FFN controls works best.}
+
+  \end{block}
+
+  \begin{block}{8. Inference throughput}
+
+    \begin{figure}
+      \centering
+      \includegraphics[width=0.80\linewidth]{\figdir/inference_throughput_moc_comparison.png}
+      \caption{Tokens/s vs.\ batch size. Shaded: gap to fully merged
+        weight adapters (upper bound). MoC tracks Control and stays well
+        above MoLEx, which re-runs pretrained blocks.}
+    \end{figure}
 
   \end{block}
 
